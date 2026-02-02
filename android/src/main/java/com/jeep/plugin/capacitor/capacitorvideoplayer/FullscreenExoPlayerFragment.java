@@ -909,9 +909,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
       trackSelector = new DefaultTrackSelector(context, videoTrackSelectionFactory);
       LoadControl loadControl = new DefaultLoadControl();
 
-      // Media3 Migration Note: DefaultBandwidthMeter and setBandwidthMeter() removed
-      // Bandwidth monitoring is now handled automatically by Media3's ExoPlayer
-      // The player intelligently adapts quality based on network conditions without manual configuration
+      // Media3 Migration Note: DefaultBandwidthMeter now configured automatically by default
       player =
         new ExoPlayer.Builder(context)
           .setSeekBackIncrementMs(10000)
@@ -953,11 +951,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     if (sturi != null) {
       setSubtitle(false);
     }
-    // Media3 Migration Note: Initialize MediaSession for PIP media controls
-    // MediaSessionConnector has been replaced with MediaSession.Builder in Media3
-    // The session integrates directly with the player - no separate connector needed
-    // Null check prevents "Session ID must be unique" error when fragment is recreated
-    // (e.g., on screen rotation or navigation back to the video)
+    // Media3 Migration Note: MediaSessionConnector replaced with MediaSession.Builder; null check prevents duplicate session ID
     if (mediaSession == null) {
       mediaSession = new MediaSession.Builder(context, player)
         .setId("capacitorvideoplayer")
@@ -998,8 +992,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
   private MediaSource buildAssetMediaSource(Uri uri) {
     MediaSource mediaSource = null;
     // Media3 Migration Note: DefaultDataSourceFactory replaced with DefaultDataSource.Factory
-    // The user-agent parameter is no longer needed - Media3 sets a default user-agent automatically
-    // DefaultDataSource.Factory handles all data source types (http, file, asset, content) automatically
     DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context);
     mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
     // Get the subtitles if any
