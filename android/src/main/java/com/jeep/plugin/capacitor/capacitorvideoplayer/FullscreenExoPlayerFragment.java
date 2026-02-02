@@ -1447,7 +1447,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
   }
 
   /**
-   * Initialize Cast framework for Chromecast
+   * Function to initialize the cast service and everything related to it
+   * @return void
    */
   private void initializeCastService() {
     Executor executor = Executors.newSingleThreadExecutor();
