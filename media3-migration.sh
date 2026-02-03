@@ -14,6 +14,7 @@
 # limitations under the License.
 ##
 shopt -s extglob
+# Khalifan: This script is kept mostly as a reference for the Media3 migration; the actual migration was done manually.
 
 PACKAGE_MAPPINGS='com.google.android.exoplayer2 com.google.android.exoplayer2
 com.google.android.exoplayer2.analytics com.google.android.exoplayer2.analytics

@@ -77,6 +77,7 @@ import androidx.media3.ui.PlayerView;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.common.VideoSize;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.Util;
 import com.google.android.gms.cast.framework.CastButtonFactory;
@@ -207,6 +208,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * @return View
    */
   public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    
     context = requireContext();
     
     packageManager = context.getPackageManager();
@@ -630,9 +632,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
       ) {
         pictureInPictureParams = new PictureInPictureParams.Builder();
-        // setup height and width of the PIP window
-        Rational aspectRatio = new Rational(player.getVideoFormat().width, player.getVideoFormat().height);
-        pictureInPictureParams.setAspectRatio(aspectRatio).build();
+        // setup aspect ratio of the PIP window; fall back to 16:9 for audio-only or not-yet-decoded video
+        VideoSize videoSize = player.getVideoSize();
+        if (videoSize != VideoSize.UNKNOWN) {
+          pictureInPictureParams.setAspectRatio(new Rational(videoSize.width, videoSize.height));
+        } else {
+          pictureInPictureParams.setAspectRatio(new Rational(16, 9));
+        }
 
         // Catch IllegalStateException that occurs when:
         // 1. Activity doesn't have android:supportsPictureInPicture="true" in manifest
