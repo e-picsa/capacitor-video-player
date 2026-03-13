@@ -24,5 +24,6 @@ npm run start
 Run on native
 
 ```bash
+npx cap sync android
 npx cap open android
 ```
