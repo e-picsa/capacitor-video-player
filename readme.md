@@ -26,6 +26,12 @@
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 </p>
 
+## Contributing
+
+If you wish to contribute to the plugin, **please ensure you read the [CONTRIBUTING.md](CONTRIBUTING.md) guide first.**
+
+ It contains critical information about our Pull Request structure (Conventional Commits), PR preview environments (`pkg.pr.new`), and automated release management.
+
 ## Maintainers
 
 | Maintainer        | GitHub                                      | Social | Active |
