@@ -46,40 +46,40 @@ import androidx.mediarouter.media.MediaControlIntent;
 import androidx.mediarouter.media.MediaRouteSelector;
 import androidx.mediarouter.media.MediaRouter;
 import com.getcapacitor.JSObject;
-import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.DefaultLoadControl;
-import com.google.android.exoplayer2.ExoPlayer;
-import com.google.android.exoplayer2.LoadControl;
-import com.google.android.exoplayer2.MediaItem;
-import com.google.android.exoplayer2.MediaMetadata;
-import com.google.android.exoplayer2.PlaybackParameters;
-import com.google.android.exoplayer2.Player;
-import com.google.android.exoplayer2.audio.AudioAttributes;
-import com.google.android.exoplayer2.ext.cast.CastPlayer;
-import com.google.android.exoplayer2.ext.cast.SessionAvailabilityListener;
-import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector;
-import com.google.android.exoplayer2.source.MediaSource;
-import com.google.android.exoplayer2.source.MergingMediaSource;
-import com.google.android.exoplayer2.source.ProgressiveMediaSource;
-import com.google.android.exoplayer2.source.SingleSampleMediaSource;
-import com.google.android.exoplayer2.source.dash.DashMediaSource;
-import com.google.android.exoplayer2.source.hls.HlsMediaSource;
-import com.google.android.exoplayer2.source.smoothstreaming.SsMediaSource;
-import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
-import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
-import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
-import com.google.android.exoplayer2.trackselection.TrackSelector;
-import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
-import com.google.android.exoplayer2.ui.CaptionStyleCompat;
-import com.google.android.exoplayer2.ui.DefaultTimeBar;
-import com.google.android.exoplayer2.ui.PlayerControlView;
-import com.google.android.exoplayer2.ui.StyledPlayerView;
-import com.google.android.exoplayer2.upstream.DataSource;
-import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
-import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
-import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
-import com.google.android.exoplayer2.util.MimeTypes;
-import com.google.android.exoplayer2.util.Util;
+import androidx.media3.common.C;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.cast.CastPlayer;
+import androidx.media3.cast.SessionAvailabilityListener;
+import androidx.media3.session.MediaSession;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MergingMediaSource;
+import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.exoplayer.source.SingleSampleMediaSource;
+import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.smoothstreaming.SsMediaSource;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.exoplayer.trackselection.ExoTrackSelection;
+import androidx.media3.exoplayer.trackselection.TrackSelector;
+import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.CaptionStyleCompat;
+import androidx.media3.ui.DefaultTimeBar;
+import androidx.media3.ui.PlayerControlView;
+import androidx.media3.ui.PlayerView;
+import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.common.VideoSize;
+import androidx.media3.common.MimeTypes;
+import androidx.media3.common.util.Util;
 import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastState;
@@ -130,7 +130,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }
   );
   private Player.Listener listener;
-  private StyledPlayerView styledPlayerView;
+  private PlayerView styledPlayerView;
   private String vType = null;
   private static ExoPlayer player;
   private boolean playWhenReady = true;
@@ -173,8 +173,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
   private static final String PLAYBACK_TIME = "play_time";
 
   private PictureInPictureParams.Builder pictureInPictureParams;
-  private MediaSessionCompat mediaSession;
-  private MediaSessionConnector mediaSessionConnector;
+  private MediaSession mediaSession;
   private PlayerControlView.VisibilityListener visibilityListener;
   private PackageManager packageManager;
   private Boolean isPIPModeeEnabled = true;
@@ -209,7 +208,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * @return View
    */
   public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-    context = container.getContext();
+    
+    context = requireContext();
+    
     packageManager = context.getPackageManager();
     
     // Initialize thread safety components
@@ -240,7 +241,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     styledPlayerView.setShowFastForwardButton(false);
     styledPlayerView.setShowRewindButton(false);
 
-    Activity mAct = getActivity();
+    Activity mAct = requireActivity();
     if (displayMode.equals("landscape")) {
       mAct.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
     }
@@ -277,7 +278,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     linearLayout.setVisibility(View.INVISIBLE);
     styledPlayerView.setControllerShowTimeoutMs(3000);
     styledPlayerView.setControllerVisibilityListener(
-      new StyledPlayerView.ControllerVisibilityListener() {
+      new PlayerView.ControllerVisibilityListener() {
         @Override
         public void onVisibilityChanged(int visibility) {
           linearLayout.setVisibility(visibility);
@@ -615,6 +616,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
    */
   private void pictureInPictureMode() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+      // Store activity reference to avoid multiple getActivity() calls and check for null
+      // Fragment may be detached from activity during transitions or configuration changes
+      Activity activity = getActivity();
+      if (activity == null) {
+        Log.v(TAG, "pictureInPictureMode: activity is null");
+        return;
+      }
       styledPlayerView.setUseController(false);
       styledPlayerView.setControllerAutoShow(false);
       linearLayout.setVisibility(View.INVISIBLE);
@@ -624,16 +632,36 @@ public class FullscreenExoPlayerFragment extends Fragment {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
       ) {
         pictureInPictureParams = new PictureInPictureParams.Builder();
-        // setup height and width of the PIP window
-        Rational aspectRatio = new Rational(player.getVideoFormat().width, player.getVideoFormat().height);
-        pictureInPictureParams.setAspectRatio(aspectRatio).build();
-        getActivity().enterPictureInPictureMode(pictureInPictureParams.build());
+        // setup aspect ratio of the PIP window; fall back to 16:9 for audio-only or not-yet-decoded video
+        VideoSize videoSize = player.getVideoSize();
+        if (videoSize != VideoSize.UNKNOWN) {
+          pictureInPictureParams.setAspectRatio(new Rational(videoSize.width, videoSize.height));
+        } else {
+          pictureInPictureParams.setAspectRatio(new Rational(16, 9));
+        }
+
+        // Catch IllegalStateException that occurs when:
+        // 1. Activity doesn't have android:supportsPictureInPicture="true" in manifest
+        // 2. Device doesn't support PIP (even though PackageManager check passed)
+        // 3. PIP is disabled in system settings
+        // This prevents crashes on devices with PIP hardware support but missing app configuration
+        try {
+          activity.enterPictureInPictureMode(pictureInPictureParams.build());
+        } catch (IllegalStateException e) {
+          Log.v(TAG, "pictureInPictureMode: failed to enter PIP", e);
+          return;
+        }
         Log.v(TAG, "PIP break 2");
       } else {
-        getActivity().enterPictureInPictureMode();
+        try {
+          activity.enterPictureInPictureMode();
+        } catch (IllegalStateException e) {
+          Log.v(TAG, "pictureInPictureMode: failed to enter PIP", e);
+          return;
+        }
         Log.v(TAG, "PIP break 3");
       }
-      isInPictureInPictureMode = getActivity().isInPictureInPictureMode();
+      isInPictureInPictureMode = activity.isInPictureInPictureMode();
       if (sturi != null) {
         setSubtitle(true);
       }
@@ -788,15 +816,16 @@ public class FullscreenExoPlayerFragment extends Fragment {
             playWhenReady = player.getPlayWhenReady();
             playbackPosition = player.getCurrentPosition();
             currentWindow = player.getCurrentWindowIndex();
-            
-            if (mediaSessionConnector != null) {
-                mediaSessionConnector.setPlayer(null);
-            }
-            
+
+            // Media3 Migration Note: MediaSession cleanup changed
+            // Old: MediaSessionConnector.setPlayer(null) + MediaSessionCompat.setActive(false)
+            // New: MediaSession.release() - properly releases all resources and removes session ID
+            // Set to null after release to allow recreation with same ID on next initialization
             if (mediaSession != null) {
-                mediaSession.setActive(false);
+                mediaSession.release();
+                mediaSession = null;
             }
-            
+
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
             player.removeListener(listener);
             player.stop(); // Add this line to properly stop the player
@@ -882,17 +911,17 @@ public class FullscreenExoPlayerFragment extends Fragment {
    */
   private void initializePlayer() {
     if (player == null) {
-      DefaultBandwidthMeter bandwidthMeter = new DefaultBandwidthMeter.Builder(context).build();
       ExoTrackSelection.Factory videoTrackSelectionFactory = new AdaptiveTrackSelection.Factory();
       trackSelector = new DefaultTrackSelector(context, videoTrackSelectionFactory);
       LoadControl loadControl = new DefaultLoadControl();
+
+      // Media3 Migration Note: DefaultBandwidthMeter now configured automatically by default
       player =
         new ExoPlayer.Builder(context)
           .setSeekBackIncrementMs(10000)
           .setSeekForwardIncrementMs(10000)
           .setTrackSelector(trackSelector)
           .setLoadControl(loadControl)
-          .setBandwidthMeter(bandwidthMeter)
           .build();
     }
 
@@ -928,11 +957,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
     if (sturi != null) {
       setSubtitle(false);
     }
-    //Use Media Session Connector from the EXT library to enable MediaSession Controls in PIP.
-    mediaSession = new MediaSessionCompat(context, "capacitorvideoplayer");
-    mediaSessionConnector = new MediaSessionConnector(mediaSession);
-    mediaSessionConnector.setPlayer(player);
-    mediaSession.setActive(true);
+    // Media3 Migration Note: MediaSessionConnector replaced with MediaSession.Builder; null check prevents duplicate session ID
+    if (mediaSession == null) {
+      mediaSession = new MediaSession.Builder(context, player)
+        .setId("capacitorvideoplayer")
+        .build();
+    }
 
     NotificationCenter.defaultCenter().postNotification("initializePlayer", info);
   }
@@ -967,7 +997,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
    */
   private MediaSource buildAssetMediaSource(Uri uri) {
     MediaSource mediaSource = null;
-    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(context, "jeep-exoplayer-plugin");
+    // Media3 Migration Note: DefaultDataSourceFactory replaced with DefaultDataSource.Factory
+    DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context);
     mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
     // Get the subtitles if any
     if (sturi != null) {
@@ -980,7 +1011,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * Build the Internal MediaSource
    */
   private MediaSource buildInternalMediaSource(Uri uri) {
-    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(context, "jeep-exoplayer-plugin");
+    DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context);
     return new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
   }
 
@@ -1011,7 +1042,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
       httpDataSourceFactory.setDefaultRequestProperties(headersMap);
     }
 
-    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(context, httpDataSourceFactory);
+    DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, httpDataSourceFactory);
 
     if (
       vType.equals("mp4") ||
