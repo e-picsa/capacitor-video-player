@@ -37,10 +37,3 @@ npm install https://pkg.pr.new/e-picsa/capacitor-video-player@123
 ```
 This allows testing native and web implementation changes without needing to build the plugin locally from source!
 
-## Release Management (Maintainers Only)
-
-Releases are fully automated and should **not** be triggered manually.
-
-1. As PRs are merged into `main`, Release Please will automatically open and maintain a "Release PR" (e.g., `chore: release 7.2.0`). This PR contains the updated `package.json` version and the newly generated `CHANGELOG.md`.
-2. When the maintainers are ready to release the next version, they simply **approve and merge the Release Please PR**.
-3. Merging the PR triggers a GitHub Action to automatically tag the commit, publish a GitHub Release, and securely publish the new version to the **NPM Registry using Provenance** (via Trusted Publishers OIDC). No manual NPM tokens are required.
