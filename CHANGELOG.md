@@ -12,6 +12,13 @@
 
  - Fix the app's Documents directory (iOS)
 
+## [7.2.2](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v7.2.1...capacitor-video-player-v7.2.2) (2026-03-13)
+
+
+### Bug Fixes
+
+* release permissions ([171e417](https://github.com/e-picsa/capacitor-video-player/commit/171e417ef1d7239db9eb520d4973f42c9c973054))
+
 ## [7.2.1](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v7.2.0...capacitor-video-player-v7.2.1) (2026-03-13)
 
 
