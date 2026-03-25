@@ -13,6 +13,7 @@ npm run build
 
 ```bash
 cd example-app
+npm i
 ```
 
 Run on web
