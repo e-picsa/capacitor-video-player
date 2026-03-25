@@ -59,8 +59,6 @@ captures
 # Android/IntelliJ/Gradle artifacts
 .gradle/
 build/
-*.iml
-.idea/
 local.properties
 
 # Keystore files
