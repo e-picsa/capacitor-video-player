@@ -25,10 +25,10 @@ What actually happened instead.
 
 ## Environment
 
-- OS:
-- Plugin version:
-- Framework (Ionic/React/Vue/vanilla):
-- Device (if applicable):
+- OS: [e.g. iOS 16, Android 13]
+- Plugin version: [e.g. 1.2.3]
+- Framework (Ionic/React/Vue/vanilla): [e.g. React 18]
+- Device (if applicable): [e.g. iPhone 14 Pro, Pixel 7]
 
 ## Screenshots / Recordings
 
