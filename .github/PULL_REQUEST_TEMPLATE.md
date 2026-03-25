@@ -16,6 +16,7 @@ All PRs should link an existing issue. Please create if one does not already exi
 - [ ] Feature
 - [ ] Documentation
 - [ ] Refactor
+- [ ] Chore
 - [ ] Other
 
 ## How Tested
