@@ -51,6 +51,16 @@ captures
 *.iml
 .idea
 
+# Eclipse metadata
+.classpath
+.project
+.settings/
+
+# Android/IntelliJ/Gradle artifacts
+.gradle/
+build/
+local.properties
+
 # Keystore files
 # Uncomment the following line if you do not want to check your keystore files in.
 #*.jks

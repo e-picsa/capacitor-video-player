@@ -14,10 +14,10 @@
     "ios/Plugin/",
     "CapacitorVideoPlayer.podspec"
   ],
-  "author": "Jean Pierre Quéau",
+  "author": "E-PICSA",
   "license": "MIT",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=22.0.0"
   },
   "repository": {
     "type": "git",
