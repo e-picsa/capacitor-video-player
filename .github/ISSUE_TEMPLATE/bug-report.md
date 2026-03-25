@@ -1,0 +1,47 @@
+---
+name: Bug Report
+about: Report something that isn't working as expected
+title: '[Bug] '
+labels: bug
+---
+
+## Description
+
+A clear and concise description of what the bug is.
+
+## Steps to Reproduce
+
+1.
+2.
+3.
+
+## Expected Behavior
+
+What you expected to happen.
+
+## Actual Behavior
+
+What actually happened instead.
+
+## Environment
+
+- OS: [e.g. iOS 16, Android 13]
+- Plugin version: [e.g. 1.2.3]
+- Framework (Ionic/React/Vue/vanilla): [e.g. React 18]
+- Device (if applicable): [e.g. iPhone 14 Pro, Pixel 7]
+
+## Screenshots / Recordings
+
+If applicable, add screenshots or screen recordings to help explain the problem.
+
+Drag & drop or paste them here.
+
+## Code Snippets
+
+```javascript
+// Relevant code that triggers the bug
+```
+
+## Possible Fix
+
+If you have identified the issue, describe what might fix it (optional).

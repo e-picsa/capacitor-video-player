@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/picsa-org/capacitor-video-player/discussions
+    about: Ask questions and engage with the community
+  - name: Documentation
+    url: https://picsa.github.io/capacitor-video-player/
+    about: Check the docs before opening an issue
