@@ -23,6 +23,8 @@ All PRs should link an existing issue. Please create if one does not already exi
 
 Describe how you tested this change. Include screenshots or screen recordings if applicable.
 
-- [ ] Tested on device:
-- [ ] Tested on simulator:
+- [ ] Tested on iOS device
+- [ ] Tested on Android device
+- [ ] Tested on iOS simulator
+- [ ] Tested on Android emulator
 
