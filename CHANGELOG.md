@@ -12,6 +12,13 @@
 
  - Fix the app's Documents directory (iOS)
 
+## [7.2.3](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v7.2.2...capacitor-video-player-v7.2.3) (2026-03-25)
+
+
+### Bug Fixes
+
+* landscape aspect ratio ([#16](https://github.com/e-picsa/capacitor-video-player/issues/16)) ([0b52204](https://github.com/e-picsa/capacitor-video-player/commit/0b522048d65171b76d96a7a8b9a334cc94c443f3))
+
 ## [7.2.2](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v7.2.1...capacitor-video-player-v7.2.2) (2026-03-13)
 
 
