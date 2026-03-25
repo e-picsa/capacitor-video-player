@@ -13,18 +13,25 @@ npm run build
 
 ```bash
 cd example-app
-npm i
 ```
 
 Run on web
 
 ```bash
+npm i
 npm run start
 ```
 
-Run on native
+Run on android
 
 ```bash
-npx cap sync android
+npm run build android
 npx cap open android
+```
+
+Run on ios
+
+```bash
+npm run build ios
+npx cap open ios
 ```

@@ -6,9 +6,7 @@ Briefly describe the changes in this PR.
 
 All PRs should link an existing issue. Please create if one does not already exist:
 
-- `Closes #123`
-- `Fixes #123`
-- `Resolves #123`
+- Closes # ‎ ‎ ‎ <-- e.g. `Closes #123`
 
 ## Type
 
@@ -23,8 +21,7 @@ All PRs should link an existing issue. Please create if one does not already exi
 
 Describe how you tested this change. Include screenshots or screen recordings if applicable.
 
-- [ ] Tested on iOS device
-- [ ] Tested on Android device
-- [ ] Tested on iOS simulator
 - [ ] Tested on Android emulator
-
+- [ ] Tested on iOS simulator
+- [ ] Tested on Android device
+- [ ] Tested on iOS device

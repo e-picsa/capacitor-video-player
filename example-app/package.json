@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "start": "vite",
-    "build": "vite build",
+    "build": "npm i && vite build && npx cap sync",
     "preview": "vite preview"
   },
   "dependencies": {
