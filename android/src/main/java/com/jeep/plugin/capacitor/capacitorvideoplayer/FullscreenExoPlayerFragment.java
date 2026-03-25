@@ -1586,6 +1586,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
   }
 
   private void adjustAspectRatio() {
-    styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    styledPlayerView.setResizeMode(resizeStatus);
   }
 }
