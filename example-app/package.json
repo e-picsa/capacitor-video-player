@@ -1,6 +1,6 @@
 {
   "name": "capacitor-video-player-example",
-  "version": "8.0.0",
+  "version": "0.0.0",
   "description": "Example app to demo capacitor-video-player",
   "main": "index.ts",
   "keywords": [
