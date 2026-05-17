@@ -2,10 +2,10 @@
 <h3 align="center">Video Player</h3>
 <p align="center"><strong><code>@picsa/capacitor-video-player</code></strong></p>
 <br>
-<p align="center" style="font-size:50px;color:green"><strong>CAPACITOR 7</strong></p><br>
+<p align="center" style="font-size:50px;color:green"><strong>CAPACITOR 8</strong></p><br>
 <br>
 <p align="center" style="font-size:16px">
-  <strong>This is a community fork</strong> providing Capacitor 7 support.<br>
+  <strong>This is a community fork</strong> providing Capacitor 8 support.<br>
   The original <a href="https://github.com/harmonwood/capacitor-video-player">capacitor-video-player</a> project is not currently maintained.<br>
   Use this as a <strong>drop-in replacement</strong> for Capacitor 7+.
 </p>
@@ -41,32 +41,44 @@ It contains critical information about our Pull Request structure (Conventional 
 | ------------ | ----------------------------------------------- | ------ | ------ |
 | Chris Clarke | [chrismclarke](https://github.com/chrismclarke) |        | ✅     |
 
-## LATEST FOR CAPACITOR 7
 
-## Browser Support
+## Compatibility
 
-The plugin follows the guidelines from the `Capacitor Team`,
+| Plugin Version | Capacitor Version | Status         |
+| -------------- | ----------------- | -------------- |
+| 8.x.x          | >=8.x.x           | Active support |
+| 7.x.x          | 7.x.x             | Supported     |
+| N/A              | 6.x.x and below             | Use legacy plugin     |
 
-- [Capacitor Browser Support](https://capacitorjs.com/docs/v3/web#browser-support)
-
-meaning that it will not work in IE11 without additional JavaScript transformations, e.g. with [Babel](https://babeljs.io/).
 
 ## Installation
 
-### Capacitor 7 (this package)
+### Capacitor 8
 
 ```bash
 npm install @picsa/capacitor-video-player
 npx cap sync
 ```
 
-Or as a drop-in replacement from the original project:
+> **Note**: If migrating from the original package, simply update your `package.json`:
+>
+> ```json
+> // Before (legacy plugin):
+> "capacitor-video-player": "6.0.2"
+>
+> // After (this plugin):
+> "capacitor-video-player": "npm:@picsa/capacitor-video-player"
+> ```
 
-```json
-"capacitor-video-player": "npm:@picsa/capacitor-video-player@^7"
+
+### Capacitor 7
+Use previous release aligned with capacitor version, e.g.
+
+```bash
+npm install @picsa/capacitor-video-player@^7
 ```
 
-### Capacitor 6 and below
+### Capacitor 6 and below (legacy plugin)
 
 Use the original [capacitor-video-player](https://github.com/harmonwood/capacitor-video-player) package:
 
@@ -75,30 +87,7 @@ npm install --save capacitor-video-player
 npx cap sync
 ```
 
-> **Note**: If migrating from the original package, simply update your `package.json`:
->
-> ```json
-> // Before (Capacitor 6):
-> "capacitor-video-player": "6.0.2"
->
-> // After (Capacitor 7):
-> "capacitor-video-player": "npm:@picsa/capacitor-video-player@^7"
-> ```
 
-### Build
-
-Then build YOUR_APPLICATION
-
-```bash
-npm run build
-npx cap copy
-npx cap copy web
-npx cap copy @capacitor-community/electron
-npx cap open android
-npx cap open ios
-npx cap open @capacitor-community/electron
-npx cap serve
-```
 
 ## Configuration
 
