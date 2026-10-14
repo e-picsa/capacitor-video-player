@@ -9,6 +9,13 @@
 
 * upgrade to Capacitor 8 ([#18](https://github.com/e-picsa/capacitor-video-player/issues/18)) ([7da0888](https://github.com/e-picsa/capacitor-video-player/commit/7da08885f3b2431054dd64c8d36a58f87f8ca545))
 
+## [8.0.1](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v8.0.0...capacitor-video-player-v8.0.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **android:** resolve NPE in FullscreenExoPlayerFragment on activity recreation ([#23](https://github.com/e-picsa/capacitor-video-player/issues/23)) ([8bcf645](https://github.com/e-picsa/capacitor-video-player/commit/8bcf6456fdeb7231ca9d6626dd882e043d96fa48))
+
 ## [7.2.3](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v7.2.2...capacitor-video-player-v7.2.3) (2026-03-25)
 
 
