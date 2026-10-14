@@ -92,6 +92,25 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
       implementation = new CapacitorVideoPlayer(this.context);
       this.filesUtils = new FilesUtils(this.context);
       this.fragmentUtils = new FragmentUtils(getBridge());
+      cleanUpOrphanedFragments();
+  }
+
+  private void cleanUpOrphanedFragments() {
+      try {
+          if (getBridge() != null && getBridge().getActivity() != null) {
+              androidx.fragment.app.FragmentManager fm = getBridge().getActivity().getSupportFragmentManager();
+              androidx.fragment.app.Fragment fs = fm.findFragmentById(frameLayoutViewId);
+              if (fs != null) {
+                  fm.beginTransaction().remove(fs).commitAllowingStateLoss();
+              }
+              androidx.fragment.app.Fragment pk = fm.findFragmentById(pickerLayoutViewId);
+              if (pk != null) {
+                  fm.beginTransaction().remove(pk).commitAllowingStateLoss();
+              }
+          }
+      } catch (Exception e) {
+          Log.e(TAG, "Error cleaning up orphaned fragments on load", e);
+      }
   }
 
   @PermissionCallback
@@ -151,36 +170,24 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
                 videoRate = mRate;
             }
         }
-        Boolean _exitOnEnd = true;
-        if (call.getData().has("exitOnEnd")) {
-            _exitOnEnd = call.getBoolean("exitOnEnd");
-        }
-        exitOnEnd = _exitOnEnd;
-        Boolean _loopOnEnd = false;
-        if (call.getData().has("loopOnEnd")) {
-            _loopOnEnd = call.getBoolean("loopOnEnd");
-        }
+        Boolean _exitOnEnd = call.getBoolean("exitOnEnd", true);
+        exitOnEnd = _exitOnEnd != null ? _exitOnEnd : true;
+
+        Boolean _loopOnEnd = call.getBoolean("loopOnEnd", false);
+        _loopOnEnd = _loopOnEnd != null ? _loopOnEnd : false;
         if (!exitOnEnd) loopOnEnd = _loopOnEnd;
-        Boolean _pipEnabled = true;
-        if (call.getData().has("pipEnabled")) {
-            _pipEnabled = call.getBoolean("pipEnabled");
-        }
-        pipEnabled = _pipEnabled;
-        Boolean _bkModeEnabled = true;
-        if (call.getData().has("bkmodeEnabled")) {
-            _bkModeEnabled = call.getBoolean("bkmodeEnabled");
-        }
-        bkModeEnabled = _bkModeEnabled;
-        Boolean _showControls = true;
-        if (call.getData().has("showControls")) {
-            _showControls = call.getBoolean("showControls");
-        }
-        showControls = _showControls;
-        String _displayMode = "all";
-        if (call.getData().has("displayMode")) {
-            _displayMode = call.getString("displayMode");
-        }
-        displayMode = _displayMode;
+
+        Boolean _pipEnabled = call.getBoolean("pipEnabled", true);
+        pipEnabled = _pipEnabled != null ? _pipEnabled : true;
+
+        Boolean _bkModeEnabled = call.getBoolean("bkmodeEnabled", true);
+        bkModeEnabled = _bkModeEnabled != null ? _bkModeEnabled : true;
+
+        Boolean _showControls = call.getBoolean("showControls", true);
+        showControls = _showControls != null ? _showControls : true;
+
+        String _displayMode = call.getString("displayMode", "all");
+        displayMode = _displayMode != null ? _displayMode : "all";
         if ("fullscreen".equals(mode)) {
             fsPlayerId = playerId;
             url = call.getString("url");
@@ -220,11 +227,8 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
                 _accentColor = call.getString("accentColor");
             }
             accentColor = _accentColor;
-            Boolean _chromecast = true;
-            if (call.getData().has("chromecast")) {
-                _chromecast = call.getBoolean("chromecast");
-            }
-            chromecast = _chromecast;
+            Boolean _chromecast = call.getBoolean("chromecast", true);
+            chromecast = _chromecast != null ? _chromecast : true;
             String _artwork = "";
             if (call.getData().has("artwork")) {
                 _artwork = call.getString("artwork");
@@ -1033,11 +1037,13 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
                                     public void run() {
                                         FrameLayout frameLayoutView = getBridge().getActivity().findViewById(frameLayoutViewId);
 
-                                        if (frameLayoutView != null) {
-                                            ((ViewGroup) getBridge().getWebView().getParent()).removeView(frameLayoutView);
-                                            fragmentUtils.removeFragment(fsFragment);
+                                        if (frameLayoutView != null && frameLayoutView.getParent() != null) {
+                                            ((ViewGroup) frameLayoutView.getParent()).removeView(frameLayoutView);
                                         }
-                                        fsFragment = null;
+                                        if (fsFragment != null) {
+                                            fragmentUtils.removeFragment(fsFragment);
+                                            fsFragment = null;
+                                        }
                                         NotificationCenter.defaultCenter().removeAllNotifications();
                                         notifyListeners("jeepCapVideoPlayerEnded", data);
                                     }
@@ -1066,11 +1072,13 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
                                     public void run() {
                                         FrameLayout frameLayoutView = getBridge().getActivity().findViewById(frameLayoutViewId);
 
-                                        if (frameLayoutView != null) {
-                                            ((ViewGroup) getBridge().getWebView().getParent()).removeView(frameLayoutView);
-                                            fragmentUtils.removeFragment(fsFragment);
+                                        if (frameLayoutView != null && frameLayoutView.getParent() != null) {
+                                            ((ViewGroup) frameLayoutView.getParent()).removeView(frameLayoutView);
                                         }
-                                        fsFragment = null;
+                                        if (fsFragment != null) {
+                                            fragmentUtils.removeFragment(fsFragment);
+                                            fsFragment = null;
+                                        }
                                         NotificationCenter.defaultCenter().removeAllNotifications();
                                         notifyListeners("jeepCapVideoPlayerExit", data);
                                     }
@@ -1089,11 +1097,13 @@ public class CapacitorVideoPlayerPlugin extends Plugin {
                         long videoId = (Long) this.getInfo().get("videoId");
                         // Get the previously saved call
                         FrameLayout pickerLayoutView = getBridge().getActivity().findViewById(pickerLayoutViewId);
-                        if (pickerLayoutView != null) {
-                            ((ViewGroup) getBridge().getWebView().getParent()).removeView(pickerLayoutView);
-                            fragmentUtils.removeFragment(pkFragment);
+                        if (pickerLayoutView != null && pickerLayoutView.getParent() != null) {
+                            ((ViewGroup) pickerLayoutView.getParent()).removeView(pickerLayoutView);
                         }
-                        pkFragment = null;
+                        if (pkFragment != null) {
+                            fragmentUtils.removeFragment(pkFragment);
+                            pkFragment = null;
+                        }
                         if (videoId != -1) {
                             Log.v(TAG, "§§§§ Notification videoPathInternalReady chromecast: " + chromecast);
                             createFullScreenFragment(
