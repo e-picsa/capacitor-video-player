@@ -41,27 +41,27 @@ public class CapacitorVideoPlayer {
     ) {
         FullscreenExoPlayerFragment fsFragment = new FullscreenExoPlayerFragment();
 
-        fsFragment.videoPath = videoPath;
-        fsFragment.videoRate = videoRate;
-        fsFragment.exitOnEnd = exitOnEnd;
-        fsFragment.loopOnEnd = loopOnEnd;
-        fsFragment.pipEnabled = pipEnabled;
-        fsFragment.bkModeEnabled = bkModeEnabled;
-        fsFragment.showControls = showControls;
-        fsFragment.displayMode = displayMode;
-        fsFragment.subTitle = subTitle;
-        fsFragment.language = language;
-        fsFragment.subTitleOptions = subTitleOptions;
-        fsFragment.headers = headers;
-        fsFragment.title = title;
-        fsFragment.smallTitle = smallTitle;
-        fsFragment.accentColor = accentColor;
-        fsFragment.chromecast = chromecast;
-        fsFragment.artwork = artwork;
-        fsFragment.isTV = isTV;
-        fsFragment.playerId = playerId;
-        fsFragment.isInternal = isInternal;
-        fsFragment.videoId = videoId;
+        fsFragment.videoPath = videoPath != null ? videoPath : "";
+        fsFragment.videoRate = videoRate != null ? videoRate : 1.0f;
+        fsFragment.exitOnEnd = exitOnEnd != null ? exitOnEnd : true;
+        fsFragment.loopOnEnd = loopOnEnd != null ? loopOnEnd : false;
+        fsFragment.pipEnabled = pipEnabled != null ? pipEnabled : true;
+        fsFragment.bkModeEnabled = bkModeEnabled != null ? bkModeEnabled : true;
+        fsFragment.showControls = showControls != null ? showControls : true;
+        fsFragment.displayMode = displayMode != null ? displayMode : "all";
+        fsFragment.subTitle = subTitle != null ? subTitle : "";
+        fsFragment.language = language != null ? language : "";
+        fsFragment.subTitleOptions = subTitleOptions != null ? subTitleOptions : new JSObject();
+        fsFragment.headers = headers != null ? headers : new JSObject();
+        fsFragment.title = title != null ? title : "";
+        fsFragment.smallTitle = smallTitle != null ? smallTitle : "";
+        fsFragment.accentColor = accentColor != null ? accentColor : "";
+        fsFragment.chromecast = chromecast != null ? chromecast : true;
+        fsFragment.artwork = artwork != null ? artwork : "";
+        fsFragment.isTV = isTV != null ? isTV : false;
+        fsFragment.playerId = playerId != null ? playerId : "";
+        fsFragment.isInternal = isInternal != null ? isInternal : false;
+        fsFragment.videoId = videoId != null ? videoId : 0L;
         return fsFragment;
     }
 

@@ -102,27 +102,27 @@ import org.json.JSONException;
 
 public class FullscreenExoPlayerFragment extends Fragment {
 
-  public String videoPath;
-  public Float videoRate;
-  public String playerId;
-  public String subTitle;
-  public String language;
-  public JSObject subTitleOptions;
-  public JSObject headers;
-  public Boolean isTV;
-  public Boolean isInternal;
-  public Long videoId;
-  public Boolean exitOnEnd;
-  public Boolean loopOnEnd;
-  public Boolean pipEnabled;
-  public Boolean bkModeEnabled;
-  public Boolean showControls;
+  public String videoPath = "";
+  public Float videoRate = 1.0f;
+  public String playerId = "";
+  public String subTitle = "";
+  public String language = "";
+  public JSObject subTitleOptions = new JSObject();
+  public JSObject headers = new JSObject();
+  public Boolean isTV = false;
+  public Boolean isInternal = false;
+  public Long videoId = 0L;
+  public Boolean exitOnEnd = true;
+  public Boolean loopOnEnd = false;
+  public Boolean pipEnabled = true;
+  public Boolean bkModeEnabled = true;
+  public Boolean showControls = true;
   public String displayMode = "all";
-  public String title;
-  public String smallTitle;
-  public String accentColor;
-  public Boolean chromecast;
-  public String artwork;
+  public String title = "";
+  public String smallTitle = "";
+  public String accentColor = "";
+  public Boolean chromecast = true;
+  public String artwork = "";
 
   private static final String TAG = FullscreenExoPlayerFragment.class.getName();
   public static final long UNKNOWN_TIME = -1L;
@@ -212,6 +212,19 @@ public class FullscreenExoPlayerFragment extends Fragment {
     context = requireContext();
     
     packageManager = context.getPackageManager();
+
+    // Check if this fragment is an orphaned recreation (e.g. after process death / activity recreation)
+    // where no video path or internal media has been provided by the plugin.
+    boolean isInternalVideo = Boolean.TRUE.equals(isInternal);
+    if ((videoPath == null || videoPath.trim().isEmpty()) && !isInternalVideo) {
+      Log.w(TAG, "FullscreenExoPlayerFragment recreated without video source; removing orphaned fragment.");
+      try {
+        getParentFragmentManager().beginTransaction().remove(this).commitAllowingStateLoss();
+      } catch (Exception e) {
+        Log.e(TAG, "Failed to remove orphaned fragment", e);
+      }
+      return new View(context);
+    }
     
     // Initialize thread safety components
     mainHandler = new Handler(Looper.getMainLooper());
@@ -242,34 +255,41 @@ public class FullscreenExoPlayerFragment extends Fragment {
     styledPlayerView.setShowRewindButton(false);
 
     Activity mAct = requireActivity();
-    if (displayMode.equals("landscape")) {
+    if ("landscape".equalsIgnoreCase(displayMode)) {
       mAct.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
     }
-    if (displayMode.equals("portrait")) {
+    if ("portrait".equalsIgnoreCase(displayMode)) {
       mAct.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
-    if (!showControls) {
+    boolean isShowControls = showControls != null ? showControls : true;
+    if (!isShowControls) {
       styledPlayerView.setUseController(false);
     } else {
       styledPlayerView.setUseController(true);
     }
 
-    if (!chromecast) {
+    boolean isChromecast = chromecast != null ? chromecast : true;
+    if (!isChromecast) {
       mediaRouteButton.setVisibility(View.GONE);
     } else {
       initializeCastService();
     }
 
-    if (title != "") {
+    if (title != null && !title.trim().isEmpty()) {
       header_tv.setText(title);
     }
-    if (smallTitle != "") {
+    if (smallTitle != null && !smallTitle.trim().isEmpty()) {
       header_below.setText(smallTitle);
     }
-    if (accentColor != "") {
-      Pbar.getIndeterminateDrawable().setColorFilter(Color.parseColor(accentColor), android.graphics.PorterDuff.Mode.MULTIPLY);
-      exo_progress.setPlayedColor(Color.parseColor(accentColor));
-      exo_progress.setScrubberColor(Color.parseColor(accentColor));
+    if (accentColor != null && !accentColor.trim().isEmpty()) {
+      try {
+        int parsedColor = Color.parseColor(accentColor);
+        Pbar.getIndeterminateDrawable().setColorFilter(parsedColor, android.graphics.PorterDuff.Mode.MULTIPLY);
+        exo_progress.setPlayedColor(parsedColor);
+        exo_progress.setScrubberColor(parsedColor);
+      } catch (Exception e) {
+        Log.e(TAG, "Invalid accent color: " + accentColor, e);
+      }
     }
 
     closeBtn = view.findViewById(R.id.exo_close);
@@ -312,7 +332,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
               stateString = "ExoPlayer.STATE_READY     -";
               Pbar.setVisibility(View.GONE);
               playerReady = true;
-              if (!showControls) {
+              boolean isShowControls = showControls != null ? showControls : true;
+              if (!isShowControls) {
                 styledPlayerView.setUseController(false);
               } else {
                 styledPlayerView.setUseController(true);
@@ -345,7 +366,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
                   NotificationCenter.defaultCenter().postNotification("playerItemPlay", info);
                   resizeBtn.setVisibility(View.VISIBLE);
 
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && pipEnabled) {
+                  boolean isPip = Boolean.TRUE.equals(pipEnabled);
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isPip) {
                     pipBtn.setVisibility(View.VISIBLE);
                   }
                 } else {
@@ -361,7 +383,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
               player.seekTo(0);
               player.setVolume(curVolume);
               player.setPlayWhenReady(false);
-              if (exitOnEnd) {
+              boolean isExitOnEnd = exitOnEnd != null ? exitOnEnd : true;
+              if (isExitOnEnd) {
                 releasePlayer();
 /*
                 Activity mAct = getActivity();
@@ -380,25 +403,32 @@ public class FullscreenExoPlayerFragment extends Fragment {
         }
       };
 
-    if (isTV) {
+    boolean isDeviceTV = Boolean.TRUE.equals(isTV);
+    if (isDeviceTV) {
       Toast.makeText(context, "Device is a TV ", Toast.LENGTH_SHORT).show();
     }
 
-    if (!isInternal) {
-      uri = Uri.parse(videoPath);
-      sturi = subTitle != null ? Uri.parse(subTitle) : null;
+    if (!Boolean.TRUE.equals(isInternal)) {
+      if (videoPath != null && !videoPath.trim().isEmpty()) {
+        uri = Uri.parse(videoPath);
+      }
+      sturi = (subTitle != null && !subTitle.trim().isEmpty()) ? Uri.parse(subTitle) : null;
 
-      stForeColor = subTitleOptions.has("foregroundColor") ? subTitleOptions.getString("foregroundColor") : "rgba(255,255,255,1)";
-      stBackColor = subTitleOptions.has("backgroundColor") ? subTitleOptions.getString("backgroundColor") : "rgba(0,0,0,1)";
-      stFontSize = subTitleOptions.has("fontSize") ? subTitleOptions.getInteger("fontSize") : 16;
+      if (subTitleOptions != null) {
+        stForeColor = subTitleOptions.has("foregroundColor") ? subTitleOptions.getString("foregroundColor") : "rgba(255,255,255,1)";
+        stBackColor = subTitleOptions.has("backgroundColor") ? subTitleOptions.getString("backgroundColor") : "rgba(0,0,0,1)";
+        stFontSize = subTitleOptions.has("fontSize") ? subTitleOptions.getInteger("fontSize") : 16;
+      }
       // get video type
-      vType = getVideoType(uri);
+      if (uri != null) {
+        vType = getVideoType(uri);
+      }
       Log.v(TAG, "display url: " + uri);
       Log.v(TAG, "display subtitle url: " + sturi);
       Log.v(TAG, "display isTV: " + isTV);
       Log.v(TAG, "display vType: " + vType);
     }
-    if (uri != null || isInternal) {
+    if (uri != null || Boolean.TRUE.equals(isInternal)) {
       // go fullscreen
       getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
       getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -423,7 +453,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
                       if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_HOME) {
                         Log.v(TAG, "$$$$ Going to backpress $$$$");
                         backPressed();
-                      } else if (isTV) {
+                      } else if (Boolean.TRUE.equals(isTV)) {
                         long videoPosition = (player == null) ? 0 : player.getCurrentPosition();
                         switch (keyCode) {
                           case KeyEvent.KEYCODE_DPAD_RIGHT:
@@ -558,9 +588,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
       !isInPictureInPictureMode &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) &&
-        isPIPModeeEnabled &&
-        pipEnabled &&
-        playerReady // <- playerReady: this prevents a crash if the user presses back before the player is ready (when enters in pip mode and tries to get the aspect ratio)
+        Boolean.TRUE.equals(isPIPModeeEnabled) &&
+        Boolean.TRUE.equals(pipEnabled) &&
+        Boolean.TRUE.equals(playerReady) // <- playerReady: this prevents a crash if the user presses back before the player is ready (when enters in pip mode and tries to get the aspect ratio)
     ) {
       pictureInPictureMode();
     } else {
@@ -693,7 +723,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     if (Util.SDK_INT >= 24) {
       if (styledPlayerView != null) {
         // If cast is playing then it doesn't start the local player once get backs from background
-        if (castContext != null && chromecast && castPlayer.isCastSessionAvailable()) return;
+        if (castContext != null && Boolean.TRUE.equals(chromecast) && castPlayer != null && castPlayer.isCastSessionAvailable()) return;
 
         initializePlayer();
         if (player.getCurrentPosition() != 0) {
@@ -713,7 +743,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
   public void onStop() {
     super.onStop();
     boolean isAppBackground = false;
-    if (bkModeEnabled) isAppBackground = isApplicationSentToBackground(context);
+    if (Boolean.TRUE.equals(bkModeEnabled)) isAppBackground = isApplicationSentToBackground(context);
     if (isInPictureInPictureMode) {
       linearLayout.setVisibility(View.VISIBLE);
       playerExit();
@@ -737,7 +767,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
         mainHandler = null;
     }
     
-    if (chromecast) mRouter.removeCallback(mCallback);
+    if (Boolean.TRUE.equals(chromecast) && mRouter != null) mRouter.removeCallback(mCallback);
     
     super.onDestroy();
   }
@@ -757,9 +787,11 @@ public class FullscreenExoPlayerFragment extends Fragment {
   @Override
   public void onPause() {
     super.onPause();
-    if (chromecast) castContext.removeCastStateListener(castStateListener);
+    if (Boolean.TRUE.equals(chromecast) && castContext != null && castStateListener != null) {
+      castContext.removeCastStateListener(castStateListener);
+    }
     boolean isAppBackground = false;
-    if (bkModeEnabled) isAppBackground = isApplicationSentToBackground(context);
+    if (Boolean.TRUE.equals(bkModeEnabled)) isAppBackground = isApplicationSentToBackground(context);
 
     if (!isInPictureInPictureMode) {
       if (Util.SDK_INT < 24) {
@@ -842,7 +874,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     
     // Move chromecast handling outside the player null check
     // and add null check for castPlayer
-    if (chromecast && castPlayer != null) {
+    if (Boolean.TRUE.equals(chromecast) && castPlayer != null) {
         try {
             castPlayer.release();
         } catch (Exception e) {
@@ -870,7 +902,8 @@ public class FullscreenExoPlayerFragment extends Fragment {
       if (
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
       ) {
-        if (!showControls) {
+        boolean isShowControls = showControls != null ? showControls : true;
+        if (!isShowControls) {
           styledPlayerView.setUseController(false);
         } else {
           styledPlayerView.setUseController(true);
@@ -927,23 +960,26 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
     styledPlayerView.setPlayer(player);
 
-    MediaSource mediaSource;
-    if (!isInternal) {
-      if (videoPath.substring(0, 21).equals("file:///android_asset") || videoPath.substring(0, 15).equals("content://media")) {
+    MediaSource mediaSource = null;
+    if (!Boolean.TRUE.equals(isInternal)) {
+      if (videoPath != null && (videoPath.startsWith("file:///android_asset") || videoPath.startsWith("content://media"))) {
         mediaSource = buildAssetMediaSource(uri);
-      } else {
+      } else if (videoPath != null && !videoPath.trim().isEmpty()) {
         mediaSource = buildHttpMediaSource();
       }
     } else {
-      Uri videoUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videoId);
-      mediaSource = buildInternalMediaSource(videoUri);
+      if (videoId != null && videoId > 0) {
+        Uri videoUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videoId);
+        mediaSource = buildInternalMediaSource(videoUri);
+      }
     }
 
     if (mediaSource != null) {
       player.setAudioAttributes(AudioAttributes.DEFAULT, true);
       player.addListener(listener);
       player.prepare(mediaSource, false, false);
-      if (loopOnEnd) {
+      boolean isLoop = Boolean.TRUE.equals(loopOnEnd);
+      if (isLoop) {
         player.setRepeatMode(player.REPEAT_MODE_ONE);
       } else {
         player.setRepeatMode(player.REPEAT_MODE_OFF);
@@ -1085,14 +1121,21 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
   private int getColorFromRGBA(String rgbaColor) {
     int ret = 0;
-    String color = rgbaColor.substring(rgbaColor.indexOf("(") + 1, rgbaColor.indexOf(")"));
-    List<String> colors = Arrays.asList(color.split(","));
-    if (colors.size() == 4) {
-      ret =
-        (Math.round(Float.parseFloat(colors.get(3).trim()) * 255) & 0xff) << 24 |
-          (Integer.parseInt(colors.get(0).trim()) & 0xff) << 16 |
-          (Integer.parseInt(colors.get(1).trim()) & 0xff) << 8 |
-          (Integer.parseInt(colors.get(2).trim()) & 0xff);
+    if (rgbaColor == null || !rgbaColor.contains("(") || !rgbaColor.contains(")")) {
+      return ret;
+    }
+    try {
+      String color = rgbaColor.substring(rgbaColor.indexOf("(") + 1, rgbaColor.indexOf(")"));
+      List<String> colors = Arrays.asList(color.split(","));
+      if (colors.size() == 4) {
+        ret =
+          (Math.round(Float.parseFloat(colors.get(3).trim()) * 255) & 0xff) << 24 |
+            (Integer.parseInt(colors.get(0).trim()) & 0xff) << 16 |
+            (Integer.parseInt(colors.get(1).trim()) & 0xff) << 8 |
+            (Integer.parseInt(colors.get(2).trim()) & 0xff);
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "Error parsing rgbaColor: " + rgbaColor, e);
     }
     return ret;
   }
@@ -1208,7 +1251,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
   private void playInternal() {
     if (player != null && !isFragmentDestroyed) {
         try {
-            PlaybackParameters param = new PlaybackParameters(videoRate);
+            PlaybackParameters param = new PlaybackParameters(videoRate != null ? videoRate : 1.0f);
             player.setPlaybackParameters(param);
 
             /* If the user start the cast before the player is ready and playing, then the video will start
@@ -1318,7 +1361,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * @return float
    */
   public float getRate() {
-    return videoRate;
+    return videoRate != null ? videoRate : 1.0f;
   }
 
   /**
@@ -1509,7 +1552,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
                     public void onCastSessionAvailable() {
                       isCastSession = true;
                       final Long videoPosition = player.getCurrentPosition();
-                      if (pipEnabled) {
+                      if (Boolean.TRUE.equals(pipEnabled)) {
                         pipBtn.setVisibility(View.GONE);
                       }
                       resizeBtn.setVisibility(View.GONE);
@@ -1527,7 +1570,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
                     public void onCastSessionUnavailable() {
                       isCastSession = false;
                       final Long videoPosition = castPlayer.getCurrentPosition();
-                      if (pipEnabled) {
+                      if (Boolean.TRUE.equals(pipEnabled)) {
                         pipBtn.setVisibility(View.VISIBLE);
                       }
                       resizeBtn.setVisibility(View.VISIBLE);

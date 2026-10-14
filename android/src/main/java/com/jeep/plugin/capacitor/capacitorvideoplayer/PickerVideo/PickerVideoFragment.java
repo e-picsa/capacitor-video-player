@@ -44,7 +44,16 @@ public class PickerVideoFragment extends Fragment {
     @SuppressWarnings("serial")
     @RequiresApi(api = Build.VERSION_CODES.M)
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        context = container.getContext();
+        context = container != null ? container.getContext() : requireContext();
+        if (container == null) {
+            Log.w(TAG, "PickerVideoFragment recreated without container; removing orphaned fragment.");
+            try {
+                getParentFragmentManager().beginTransaction().remove(this).commitAllowingStateLoss();
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to remove orphaned picker fragment", e);
+            }
+            return new View(context);
+        }
         // Inflate the layout for this fragment
         view = inflater.inflate(R.layout.fragment_picker_video, container, false);
         loadVideos();
