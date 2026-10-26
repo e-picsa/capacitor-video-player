@@ -131,6 +131,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
   );
   private Player.Listener listener;
   private PlayerView styledPlayerView;
+  private View loadingOverlay;
   private String vType = null;
   private static ExoPlayer player;
   private boolean playWhenReady = true;
@@ -234,6 +235,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
     constLayout = view.findViewById(R.id.fsExoPlayer);
     linearLayout = view.findViewById(R.id.linearLayout);
     styledPlayerView = view.findViewById(R.id.videoViewId);
+    loadingOverlay = view.findViewById(R.id.loadingOverlay);
     header_tv = view.findViewById(R.id.header_tv);
     header_below = view.findViewById(R.id.header_below);
     Pbar = view.findViewById(R.id.indeterminateBar);
@@ -326,11 +328,11 @@ public class FullscreenExoPlayerFragment extends Fragment {
               break;
             case ExoPlayer.STATE_BUFFERING:
               stateString = "ExoPlayer.STATE_BUFFERING -";
-              Pbar.setVisibility(View.VISIBLE);
+              loadingOverlay.setVisibility(View.VISIBLE);
               break;
             case ExoPlayer.STATE_READY:
               stateString = "ExoPlayer.STATE_READY     -";
-              Pbar.setVisibility(View.GONE);
+              loadingOverlay.setVisibility(View.GONE);
               playerReady = true;
               boolean isShowControls = showControls != null ? showControls : true;
               if (!isShowControls) {
@@ -892,6 +894,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
   public void onResume() {
     super.onResume();
     //if (chromecast && castContext != null) castContext.addCastStateListener(castStateListener);
+    // A Fragment can be resumed after its view has been discarded (for example,
+    // after Android restores an orphaned Fragment following process death).
+    // Do not touch PlayerView state until this Fragment has a real player view.
+    if (styledPlayerView == null || getView() == null) {
+      Log.w(TAG, "Skipping onResume because the player view is unavailable");
+      return;
+    }
     if (!isInPictureInPictureMode) {
       hideSystemUi();
       if ((Util.SDK_INT < 24 || player == null)) {
@@ -943,6 +952,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * Initialize the player
    */
   private void initializePlayer() {
+    // onStart/onResume may still be delivered while a Fragment is being removed
+    // or after its view has been destroyed. PlayerView belongs to the view
+    // lifecycle, so player initialization must wait for a live view.
+    if (styledPlayerView == null || getView() == null) {
+      Log.w(TAG, "Skipping player initialization because the player view is unavailable");
+      return;
+    }
     if (player == null) {
       ExoTrackSelection.Factory videoTrackSelectionFactory = new AdaptiveTrackSelection.Factory();
       trackSelector = new DefaultTrackSelector(context, videoTrackSelectionFactory);
