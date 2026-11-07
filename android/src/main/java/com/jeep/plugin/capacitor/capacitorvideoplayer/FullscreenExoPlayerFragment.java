@@ -952,11 +952,17 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * Initialize the player
    */
   private void initializePlayer() {
+<<<<<<< HEAD
     // onStart/onResume may still be delivered while a Fragment is being removed
     // or after its view has been destroyed. PlayerView belongs to the view
     // lifecycle, so player initialization must wait for a live view.
     if (styledPlayerView == null || getView() == null) {
       Log.w(TAG, "Skipping player initialization because the player view is unavailable");
+=======
+    // Guard against orphaned fragment recreations where onCreateView returned
+    // an empty View without inflating the layout (styledPlayerView is null).
+    if (styledPlayerView == null) {
+>>>>>>> main
       return;
     }
     if (player == null) {
