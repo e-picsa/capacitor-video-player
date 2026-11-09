@@ -301,7 +301,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
       new PlayerView.ControllerVisibilityListener() {
         @Override
         public void onVisibilityChanged(int visibility) {
-          linearLayout.setVisibility(visibility);
+          if (linearLayout != null) {
+            linearLayout.setVisibility(visibility);
+          }
         }
       }
     );
@@ -310,6 +312,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
       new Player.Listener() {
         @Override
         public void onPlayerStateChanged(boolean playWhenReady, int state) {
+          if (isFragmentDestroyed || player == null || styledPlayerView == null) {
+            return;
+          }
           String stateString;
           Map<String, Object> info = new HashMap<String, Object>() {
             {
@@ -546,7 +551,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
     @Override
     protected void onPostExecute(Bitmap result) {
-      cast_image.setImageBitmap(result);
+      if (cast_image != null) {
+        cast_image.setImageBitmap(result);
+      }
     }
   }
 
@@ -773,12 +780,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
    */
   @Override
   public void onDestroy() {
+    // Release player before setting isFragmentDestroyed and calling super to ensure proper cleanup order
+    releasePlayer();
     isFragmentDestroyed = true;
     
-    // Release player before calling super to ensure proper cleanup order
-    releasePlayer();
-    
-    // Clean up handler
+    // Clean up handlers
+    handler.removeCallbacks(mRunnable);
     if (mainHandler != null) {
         mainHandler.removeCallbacksAndMessages(null);
         mainHandler = null;
@@ -807,22 +814,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
       styledPlayerView.setPlayer(null);
       styledPlayerView = null;
     }
-    linearLayout = null;
-    constLayout = null;
-    Pbar = null;
-    closeBtn = null;
-    pipBtn = null;
-    resizeBtn = null;
-    header_tv = null;
-    header_below = null;
-    exo_progress = null;
-    exo_position = null;
-    exo_duration = null;
-    exo_label_separation = null;
-    live_text = null;
-    cast_image = null;
-    mediaRouteButton = null;
-    view = null;
     super.onDestroyView();
   }
 
@@ -1485,7 +1476,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * @param button
    */
   private void mediaRouteButtonColorWhite(MediaRouteButton button) {
-    if (button == null) return;
+    if (button == null || getContext() == null) return;
     Context castContext = new ContextThemeWrapper(getContext(), androidx.mediarouter.R.style.Theme_MediaRouter);
 
     TypedArray a = castContext.obtainStyledAttributes(
@@ -1581,6 +1572,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
     task.addOnCompleteListener(new OnCompleteListener<CastContext>() {
       @Override
       public void onComplete(Task<CastContext> task) {
+        if (isFragmentDestroyed || !isAdded() || context == null || mediaRouteButton == null) {
+          return;
+        }
         if (task.isSuccessful()) {
           castContext = task.getResult();
           castPlayer = new CastPlayer(castContext);
@@ -1597,6 +1591,9 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
           castStateListener =
                   state -> {
+                    if (mediaRouteButton == null) {
+                      return;
+                    }
                     if (state == CastState.NO_DEVICES_AVAILABLE) {
                       mediaRouteButton.setVisibility(View.GONE);
                     } else {
