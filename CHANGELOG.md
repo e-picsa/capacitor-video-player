@@ -9,6 +9,13 @@
 
 * upgrade to Capacitor 8 ([#18](https://github.com/e-picsa/capacitor-video-player/issues/18)) ([7da0888](https://github.com/e-picsa/capacitor-video-player/commit/7da08885f3b2431054dd64c8d36a58f87f8ca545))
 
+## [8.0.4](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v8.0.3...capacitor-video-player-v8.0.4) (2026-11-11)
+
+
+### Bug Fixes
+
+* **android:** resolve NPE in buildHttpMediaSource on player re-init ([#30](https://github.com/e-picsa/capacitor-video-player/issues/30)) ([f302abb](https://github.com/e-picsa/capacitor-video-player/commit/f302abbcc9f3768d62114a5de6879f18424f25c9))
+
 ## [8.0.3](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v8.0.2...capacitor-video-player-v8.0.3) (2026-11-09)
 
 
