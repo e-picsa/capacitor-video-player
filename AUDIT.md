@@ -1,194 +1,257 @@
-# Repository Audit — November 2026
+# Audit Report — @picsa/capacitor-video-player
 
-Scope: `@picsa/capacitor-video-player` v8.0.3 (Capacitor 8). This covers the tech stack, risks that affect users, and code structure. Every finding below comes from reading the source. Line references point at the current `main`.
+> Generated with `.agents/skills/repo-audit/SKILL.md`.
+> Date: 2026-11-12. Base commit: `417e4a9b5623b96b58c05b3464c02bfc0d8941b4` (audited at `8861721`, roadmap updated after PR #38 `417e4a9`). Scope: full (TS/Web, Android Java, iOS Swift/ObjC, CI, `example-app`).
+> Context: `repo-context.md` filled.
+> Previous audit: November 2026 (`72f36d7`, updated in `4a4a06d`).
+> Second opinion: `opencode-go/muse-spark-1.3-contributor` (`variant: xhigh`, 2026-11-12), 5 P0 claims spot-checked + 7 gap candidates raised.
 
----
+## Top summary
 
-## TL;DR
+**Strengths (6):**
 
-| Area | Verdict |
-| --- | --- |
-| Release / supply-chain tooling | ✅ Good for a small plugin (release-please, npm provenance, pkg.pr.new previews, conventional PR titles) |
-| Android dependency currency | ✅ Media3 1.9, AGP 8.13, SDK 36, Java 21 |
-| Android robustness | ⚠️ Recent fixes deal with symptoms. The root causes (a `static` player, the fragment overlay design, the global event bus) are still there |
-| Android platform compliance (2026) | ❌ Back handling breaks on Android 16 with targetSdk 36. Background playback has no foreground service. `READ_MEDIA_VIDEO` runs into Play policy |
-| iOS | ❌ No Swift Package Manager support (SPM is the Capacitor 8 default). 3 API methods aren't exposed. Marked untested in `example-app/TODO.md` |
-| CI / verification | ❌ CI never compiles or tests native code. This matters more than anything else when most changes are AI-written |
-| API design | ⚠️ Errors come back as resolved `{result:false}`, everything in the types is optional, and Android sends some fields as the wrong type |
-| Code structure | ⚠️ Two god classes (1.7k + 1.3k lines). About 60% of the plugin class is copy-paste. A custom event bus is used where a plain callback would do |
+- **Active CI & release automation:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`Lint & Web Build`, `Android Build & Lint`, `Android Instrumented Tests (API 35)`) is green after PR #38 (`417e4a9`), alongside `release-please` + `npm publish --provenance` + `pkg.pr.new` PR previews + semantic PR title checks in [`.github/workflows/release-please.yml`](.github/workflows/release-please.yml), [`.github/workflows/pr-preview.yml`](.github/workflows/pr-preview.yml), and [`.github/workflows/pr-title.yml`](.github/workflows/pr-title.yml).
+- **Android path traversal hardening:** [`FilesUtils.java`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Utilities/FilesUtils.java#L38-L100) canonicalises `_capacitor_file_` and `application://` paths and validates directory containment with separator-safe prefix checks.
+- **Current Android toolchain baseline:** [`android/build.gradle`](android/build.gradle#L14-L66) and [`example-app/android/variables.gradle`](example-app/android/variables.gradle#L1-L16) use AGP 8.13.0, Gradle 8.14.3, `compileSdk 36`, `minSdk 24`, Java 21, and Media3 1.9.1 (all verified compiling cleanly via `:app:assembleDebug`).
+- **Lifecycle regression test suite exists:** [`FullscreenExoPlayerFragmentTest.java`](example-app/android/app/src/androidTest/java/com/getcapacitor/myapp/FullscreenExoPlayerFragmentTest.java#L14-L66) covers null-`PlayerView` / uninitialized-player lifecycle paths, and [`android-matrix-test.yml`](.github/workflows/android-matrix-test.yml#L34-L35) defines API 24/28/33/34/35 emulator runs.
+- **TS/Web build and Prettier checks pass cleanly:** `npm run build` (`docgen`, `tsc --strict`, `rollup`) and `prettier --check` pass with 0 errors.
+- **Repo process hygiene:** [`AGENTS.md`](AGENTS.md#L1-L29) prevents accidental PRs against the abandoned upstream fork, and [`repo-context.md`](.agents/skills/repo-audit/repo-context.md#L1-L54) documents user archetypes and priorities.
 
----
+**Priority issues (ordered by value relative to effort; `F1` resolved in PR #38):**
 
-## 1. What's good
+1. [P0] **Android back button fails on targetSdk 36 / Android 16+** — `View.OnKeyListener` for `KEYCODE_BACK` is bypassed by predictive back, trapping users in the player (`FullscreenExoPlayerFragment.java:455-490`, `CONFIRMED`, first seen Nov 2026).
+2. [P0] **PiP `onStop()` calls `finishAndRemoveTask()`, killing the host app** — Swiping away PiP destroys `BridgeActivity` and loses unsaved app state; re-calling `initPlayer()` while active fails (`FullscreenExoPlayerFragment.java:775-778`, `CapacitorVideoPlayerPlugin.java:1207-1209`, `CONFIRMED`, first seen Nov 2026).
+3. [P0] **Static `ExoPlayer` and `cast_image` cause lifecycle NPEs and Activity leaks** — Shared `static` fields outlive fragment recreation and trigger Android Lint `StaticFieldLeak` (`FullscreenExoPlayerFragment.java:135,152`, `CONFIRMED`, first seen Nov 2026).
+4. [P0] **iOS `xcodebuild` fails out of the box (`IPHONEOS_DEPLOYMENT_TARGET = 13.0`)** — Project and committed Pods target iOS 13.0 while Xcode 27 / iOS 27.2 SDK requires ≥15.0; iOS CI remains disabled (`ios/Plugin.xcodeproj/project.pbxproj:498`, `CONFIRMED`, first seen Nov 2026 / build failure confirmed this audit).
+5. [P1] **Android Lint conceals 104 errors (`UnsafeOptInUsageError`) and 79 warnings** — `abortOnError = false` lets CI report green while failing lint (`android/build.gradle:36-38`, `CONFIRMED`, first seen Nov 2026 / counts confirmed this audit).
+6. [P1] **iOS fatal/crash/hang bugs & missing SPM/`CAPBridgedPlugin` parity** — `exit(1)` on subtitle conversion error, force-unwrapped `artwork` URL, `getMuted()` always `true`, hanging `CAPPluginCall`s, unsafe `File.swift` slicing, and no `Package.swift` (`FullScreenVideoPlayerView.swift:418-420,456-492,543`, `CapacitorVideoPlayerPlugin.m:6-22`, `CONFIRMED`, first seen Nov 2026 / code bugs new this audit).
 
-- **Release pipeline.** release-please → `npm publish --provenance` with `id-token: write` is the 2026 best practice. `pkg-pr-new` previews make it cheap to test a PR inside the real app. A semantic PR title check keeps the changelog clean.
-- **Dependencies are current.** The ExoPlayer2 → Media3 migration is done, and Media3, AGP, compile/target SDK 36 and Java 21 are all up to date.
-- **Security hardening in [FilesUtils.java](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Utilities/FilesUtils.java).** Capacitor file URLs and `application://` URLs are canonicalised and kept inside the app's own directories, with separator-safe prefix checks. That's a thoughtful fix that most plugins don't have.
-- **Regression tests exist.** [FullscreenExoPlayerFragmentTest.java](example-app/android/app/src/androidTest/java/com/getcapacitor/myapp/FullscreenExoPlayerFragmentTest.java) covers the lifecycle-NPE cases. That's the right instinct (see §4 for the gap).
-- **Process hygiene.** `AGENTS.md` guardrails, issue/PR templates, a README that is honest about fork status, and a working example app.
-- **Fragment lifecycle awareness has improved.** Orphan cleanup in `load()`, null-guarded `onResume`/`onStart`, and a guarded PiP aspect ratio all remove real crash paths.
+**Highest-leverage recommendation:**
 
----
+- **Remove `lintOptions { abortOnError = false }` (adding `@OptIn(UnstableApi.class)` for Media3) and land the surgical Android P0 fixes (`OnBackPressedCallback` + removing `finishAndRemoveTask()`) (`Maintainer`)** — With CI restored in PR #38 (`417e4a9`), enforcing Android Lint ensures the 104 concealed errors and `StaticFieldLeak` warnings fail PR checks before Phase 2/3 Android and iOS refactors proceed.
 
-## 2. Stack & platform concerns that affect users (ordered by impact)
+## Scope and coverage
 
-### 2.1 🔴 Android back button stops working for apps targeting SDK 36 (Android 16+)
-[FullscreenExoPlayerFragment.java#L452-L487](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L452-L487) catches back with `View.OnKeyListener` and `KEYCODE_BACK`. When the **host app** targets API 36 (the Capacitor 8 template default), Android 16 enables predictive back and **no longer sends `KEYCODE_BACK`**. The back gesture then goes to Capacitor's own handler (webview history or app exit) while the player overlay stays on screen. `KEYCODE_HOME` is never delivered to apps at all.
+- **Dirs read:** `src/`, `android/src/main/java/`, `android/src/main/res/layout/`, `android/build.gradle`, `android/proguard-rules.pro`, `ios/Plugin/` (all Swift/ObjC/plist/pbxproj/Podfile), `.github/workflows/`, `example-app/` (`src/`, `android/app/`, `package.json`, `TODO.md`), `docs/` (listing + `API.md` generation), root config files (`package.json`, `tsconfig.json`, `rollup.config.mjs`, `CapacitorVideoPlayer.podspec`, `AGENTS.md`, `readme.md`, `.gitignore`).
+- **Dirs skipped:** `node_modules/`, `dist/` (generated build output), `ios/Pods/` (vendored CocoaPods, except checking `Pods.xcodeproj` deployment target error), `android/.gradle/`, `example-app/dist/`, `example-app/ios/Pods/`.
+- **Commands run:**
+  - `npm run lint` — ESLint passed (0 errors, 6 warnings in `example-app/src/main.ts` + TS 5.9.3 version warning); Prettier passed; `swiftlint` skipped (binary not in PATH).
+  - `npm run build` — passed (`docgen`, `tsc`, `rollup`).
+  - `npm test` — passed as no-op (`echo "No test specified"`).
+  - `ruby -ryaml -e "Dir['.github/workflows/*.yml'].each { |f| YAML.safe_load_file(f) }"` — originally **FAILED** on `8861721` (`Psych::SyntaxError` at `.github/workflows/ci.yml` line 60 column 24), now **PASSED** on `417e4a9` (PR #38).
+  - `gh run list` / `gh run view` (read-only) — confirmed last 3 `ci.yml` runs on `8861721` failed at 0s (`workflow file issue`), and PR #38 CI run `43297172534` passed all 3 jobs (`Lint & Web Build`, `Android Build & Lint`, `Android Instrumented Tests (API 35)`).
+  - `gh issue list --repo e-picsa/capacitor-video-player --limit 20 --state open` — `no open issues in e-picsa/capacitor-video-player`.
+  - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/Users/chrismclarke/Library/Android/sdk ./gradlew :capacitor-video-player:lintDebug :app:lintDebug assembleDebug --no-daemon` (in `example-app/android`) — `BUILD SUCCESSFUL`, but `:capacitor-video-player:lintDebug` reported **104 errors and 79 warnings** suppressed by `abortOnError = false`.
+  - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/Users/chrismclarke/Library/Android/sdk ./gradlew test --no-daemon` (in `android/`) — `BUILD SUCCESSFUL` with `NO-SOURCE` (0 unit tests) and dirtied tracked `android/.gradle/buildOutputCleanup/*` files (reverted via `git checkout -- android/.gradle`).
+  - `xcodebuild -workspace Plugin.xcworkspace -scheme Plugin -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build` (in `ios/`) — **FAILED** (`IPHONEOS_DEPLOYMENT_TARGET` 13.0 unsupported; valid 15.0 to 27.2.x).
+- **Assumptions:** Archetypes and scope overrides taken directly from [`repo-context.md`](.agents/skills/repo-audit/repo-context.md#L16-L35); no archetypes were inferred.
 
-**Fix:** register an `OnBackPressedCallback` on `requireActivity().getOnBackPressedDispatcher()` with `getViewLifecycleOwner()`. It's small and can ship on its own.
+## Delta since last audit
 
-### 2.2 🔴 The `static` ExoPlayer is the root of the NPE/lifecycle crashes
-`private static ExoPlayer player;` ([L135](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L135)) and `private static ImageView cast_image;` ([L152](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L152)) are shared across every fragment instance and outlive the Activity:
-- When a fragment is recreated (rotation, process restore, a second `initPlayer`), the new instance and the old one both own the same player. One releases it while the other is still using it, which is exactly the crash class the last four `fix(android)` releases patched around.
-- The static `ImageView` keeps a destroyed Activity alive (memory leak).
+Baseline: [`AUDIT.md` (November 2026, commit `72f36d7` / `4a4a06d`)](AUDIT.md).
 
-The recent guards (`isFragmentDestroyed`, `isPlayerOperationSafe`, main-thread re-posting, try/catch around everything) treat symptoms of this one decision. **Making the player an instance field owned by one lifecycle** removes a whole category of bugs and lets much of that defensive code be deleted.
+| Prior finding (Nov 2026) | Status | Evidence |
+| --- | --- | --- |
+| Phase 1 #1: Native CI & Android toolchain modernization (`PR #35`) | **Fixed (CI) / Partial (`ios-build`)** | `PR #35` landed CI, `2b50c74` (`PR #37`) broke YAML syntax, and [`PR #38`](https://github.com/e-picsa/capacitor-video-player/pull/38) (`417e4a9`) fixed [`.github/workflows/ci.yml`](.github/workflows/ci.yml#L60) so all 3 Web/Android CI jobs pass (`run 43297172534`); `ios-build` still commented out (`L168-189`). |
+| §2.1 Android back button broken on targetSdk 36 | **Still open** | [`FullscreenExoPlayerFragment.java#L455-L490`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L455-L490) still uses `View.OnKeyListener`. |
+| §2.2 `static` `ExoPlayer` and `cast_image` root cause | **Still open** | [`FullscreenExoPlayerFragment.java#L135,L152`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L135-L152) still `static`; Android Lint flags `StaticFieldLeak` x2. |
+| §2.3 Closing PiP kills host app (`finishAndRemoveTask()`) + fragment overlay | **Still open** | [`FullscreenExoPlayerFragment.java#L775-L778`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L775-L778); [`CapacitorVideoPlayerPlugin.java#L1207-L1209`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L1207-L1209). |
+| §2.4 `isApplicationSentToBackground` always true & no `MediaSessionService` | **Still open** | [`FullscreenExoPlayerFragment.java#L1658-L1676`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1658-L1676); [`CapacitorVideoPlayerPlugin.java#L63`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L63) defaults `true`. |
+| §2.5 Remove `url: "internal"` picker & `READ_MEDIA_VIDEO` permissions | **Still open** | [`CapacitorVideoPlayerPlugin.java#L34-L39,L247-L258`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L34-L39); `PickerVideo/` and `VideoPicker/` remain. |
+| §2.6 iOS missing SPM (`Package.swift`), 3 methods, stale Swift, globals | **Still open** | [`CapacitorVideoPlayerPlugin.m#L6-L22`](ios/Plugin/CapacitorVideoPlayerPlugin.m#L6-L22); [`Plugin.xcodeproj/project.pbxproj#L498`](ios/Plugin.xcodeproj/project.pbxproj#L498) fails `xcodebuild` on target 13.0. |
+| §2.7 `artwork != ""` string reference comparison | **Fixed** | Replaced with `!image.trim().isEmpty()` / `!artwork.trim().isEmpty()` in [`FullscreenExoPlayerFragment.java#L538,L1722`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L538) (via `f302abb`). |
+| §2.7 Other user-facing bugs (TV toast, `onPlayerStateChanged`, `headers` log, `content://`, `mDuration`, `mCurrentPosition`, `AsyncTask`, executor, orientation/flags, Cast bundle) | **Still open** | [`FullscreenExoPlayerFragment.java#L258-L444,L534,L1349,L1683`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L258-L444); [`CapacitorVideoPlayerPlugin.java#L241`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L241); [`FilesUtils.java#L16-L32`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Utilities/FilesUtils.java#L16-L32). |
+| §3 API / TS surface (resolved errors, optional types, string `currentTime`, `hls.js` peerDep) | **Still open** | [`src/definitions.ts#L114-L313`](src/definitions.ts#L114-L313); [`package.json#L72-L75`](package.json#L72-L75). |
+| §4 Tooling & AI workflow (`abortOnError = false`, ESLint 8, `npm test`, committed Pods/`.idea`, stale docs) | **Still open** | [`android/build.gradle#L36-L38`](android/build.gradle#L36-L38); [`package.json#L49,L63`](package.json#L49); `git ls-files ios/Pods android/.idea`. |
+| §5 Code structure (god fragment, 21-arg pipeline, `this.ret`/`this.call`, `NotificationCenter`, 17 wrappers, dead layouts/deps) | **Still open** | [`CapacitorVideoPlayerPlugin.java#L71,L84,L269-L900`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L269-L900); [`FullscreenExoPlayerFragment.java#L103`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L103). |
+| Phase 4 #10 Capacitor 8 & 9 dual-support readiness | **Still open** | [`package.json#L73`](package.json#L73); [`android/build.gradle#L22-L25`](android/build.gradle#L22-L25); [`android/proguard-rules.pro#L1-L22`](android/proguard-rules.pro#L1-L22). |
 
-### 2.3 🔴 Closing PiP kills the whole host app (and PiP architecture trade-offs)
-PiP is currently entered on the **host Capacitor Activity** (`BridgeActivity`), meaning the entire Activity—WebView and all—shrinks into the floating PiP window with `FullscreenExoPlayerFragment` covering it. Furthermore, in [`onStop`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L762-L776), being in PiP mode calls `activity.finishAndRemoveTask()`. When a user swipes away the PiP window, the app's main activity and its task go with it, losing any unsaved app state.
+- **New in this audit (7 findings):**
+  1. `F1` [P0 -> **Fixed in PR #38**]: `.github/workflows/ci.yml` YAML parse error (`Fail-fast: cancel workflow on failure`) breaking all CI runs (resolved in `417e4a9`).
+  2. `F5` (new verification detail) [P0]: `xcodebuild` fails immediately on `IPHONEOS_DEPLOYMENT_TARGET = 13.0` in `Plugin.xcodeproj` and committed `Pods.xcodeproj`.
+  3. `F10` (quantified) [P1]: 104 Android Lint `UnsafeOptInUsageError` errors + 79 warnings concealed by `abortOnError = false`.
+  4. `F11` [P1]: iOS `exit(1)` on SRT conversion failure, force-unwrapped `artwork` URL, `getMuted()` always returning `true`, leaked `videoPlayerMoveObserver`, and 13 `@objc` methods hanging `CAPPluginCall` when player/ID mismatches.
+  5. `F13` [P1]: iOS `File.swift` out-of-bounds slicing crashes + missing path-traversal checks + `file://` string passed to `FileManager.fileExists(atPath:)`.
+  6. `F14` [P1]: Web plugin double-wraps `initPlayer` result (`{ result: { result: ... } }`), leaks `document` event listeners, and treats `volume: 0` as `0.5`.
+  7. `F18` / `F25` [P2]: Android `fsPlayerId` NPE if `initPlayer` omits `playerId`; `setMuted` resolves `result: true` on missing `muted`; tracked `android/.gradle/buildOutputCleanup/*` dirtying git on Gradle runs.
 
-To support **browsing the app while a video plays in PiP**, **launching a new video while already in PiP** (replacing or reusing the active player), and **streaming playback events/progress back to the Capacitor JS layer while in PiP**, there are two architectural options:
+## User impact and functionality
 
-#### Option A: Dedicated `PlayerActivity` (`singleTask` / `supportsPictureInPicture="true"`) + Event Bridge
-Fullscreen playback runs in its own `PlayerActivity` rather than a Fragment overlaid on `BridgeActivity`.
-- **How it works:**
-  - When the user enters PiP, only `PlayerActivity` shrinks into the floating PiP window. `BridgeActivity` (the Capacitor WebView) remains full-screen underneath so the user can keep using the app.
-  - Because `PlayerActivity` is declared with `android:launchMode="singleTask"` (or `singleTop`), calling `initPlayer()` from JS while `PlayerActivity` is already in PiP delivers `onNewIntent(Intent)` to the existing `PlayerActivity` instance, which simply swaps the `MediaItem` on the existing `ExoPlayer` (or resets it) and optionally expands back to fullscreen.
-  - A lightweight shared `PlayerEventBridge` (singleton or bound `MediaSessionService`) forwards playback state/progress events (`Play`, `Pause`, `Ended`, `Exit`, time updates) from `PlayerActivity` back to `CapacitorVideoPlayerPlugin` -> JS `notifyListeners(...)`.
-- **Pros:**
-  - **Only way to allow in-app browsing during PiP.** On Android, PiP operates at the `Activity` level. If the player is a Fragment inside `BridgeActivity`, the entire `BridgeActivity` goes into the tiny PiP window—the user *cannot* use the Capacitor app while watching in PiP unless the player is in a separate `PlayerActivity`.
-  - Cleanly isolates orientation locking, fullscreen window insets, and back-button handling from the host WebView.
-  - Dismissing the PiP window only finishes `PlayerActivity`; `BridgeActivity` is untouched.
-- **Cons:**
-  - Launching `PlayerActivity` pauses `BridgeActivity` while fullscreen, which fires Capacitor `appStateChange` (`isActive: false`) in JS. (Once `PlayerActivity` enters PiP and the user taps back into the app, `BridgeActivity` resumes).
-  - Requires a small static/singleton callback bridge between the plugin and `PlayerActivity` (though this is much simpler and safer than the current `NotificationCenter`).
+Archetypes (from [`repo-context.md`](.agents/skills/repo-audit/repo-context.md#L16-L20)):
 
-#### Option B: Keep `FullscreenExoPlayerFragment` in `BridgeActivity` (Fix lifecycle & remove `finishAndRemoveTask()`)
-Keep the single-Activity Fragment overlay approach, remove `activity.finishAndRemoveTask()`, pass config via `Fragment.setArguments(Bundle)`, and allow `initPlayer()` to replace the active media item or swap the Fragment cleanly.
-- **Pros:**
-  - Zero cross-Activity communication needed; the Plugin holds a direct reference to the Fragment and its `PlayerEventListener`.
-  - Never pauses `BridgeActivity` when opening the fullscreen player.
-  - Smaller refactor from the current codebase.
-- **Cons:**
-  - **Users cannot interact with the Capacitor app while in PiP.** Because `BridgeActivity` itself is the Activity in PiP mode, shrinking to PiP sends the whole app to the home screen / over other apps. Tapping the PiP window restores the fullscreen video, not the Capacitor WebView underneath.
+- **App developer integrating video into offline-first rural field apps (e.g. PICSA)** — Goal: reliable local/stream playback with PiP and progress events; Constraint: low-end Android devices and Play Store policy compliance; Broken means host-app crashes, ANRs, killed host Activity on PiP close, or Play Console rejections.
+- **End user watching training video on low-end / low-bandwidth devices** — Goal: watch training clips smoothly, background/PiP without losing place; Constraint: old Android devices, intermittent connectivity, tight storage; Broken means back button trapped, silent stalls, lost playback position, battery drain, or bloated APKs.
+- **Maintainer triaging AI-assisted PRs** — Goal: merge fast with confidence; Constraint: limited manual device QA across Android/iOS; Broken means dead CI, concealed lint errors, broken native builds, and bloated/duplicated bridge code.
 
-> [!IMPORTANT]
-> **Recommendation:**
-> - **Immediate fix (Phase 2):** Delete `activity.finishAndRemoveTask()` in `FullscreenExoPlayerFragment.onStop()`, and update `CapacitorVideoPlayerPlugin.initPlayer()` so that if an existing player fragment is already active (including in PiP), it cleanly stops/removes the old fragment (or loads the new URI into the existing player) instead of failing with `"FrameLayout for ExoPlayer already exists"` ([Plugin L1209](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L1209)).
-> - **Target architecture (Phase 3):** If your users need to **navigate the Capacitor app while a video continues in PiP** (which your requirements—"whilst in PiP mode the user tries to launch a different video" and "track video playback progress events in the app whilst in PiP"—directly imply), **you must use Option A (Dedicated `PlayerActivity`)**. On Android, a single Activity cannot be both in PiP mode and full-screen interactive at the same time.
+Gap findings:
 
-### 2.4 🟠 Background mode doesn't work as intended, and isn't compliant
-- [`isApplicationSentToBackground`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1550-L1562) returns `true` whenever the app's own process is in `getRunningAppProcesses()`, and it always is. So with `bkmodeEnabled` (default `true`), `onPause` **never pauses**. That includes when a phone call or the notification shade takes focus.
-- Real background playback on Android 14+ needs a `MediaSessionService` with `foregroundServiceType="mediaPlayback"` and a media notification. Without one, the OS kills playback unpredictably and the user gets no lock-screen or notification controls. Today there is a `MediaSession` but no service.
+- F8 [P1, CONFIRMED, H/M] **`url: "internal"` video picker triggers Play Store `READ_MEDIA_VIDEO` policy risk and main-thread ANRs** — [`CapacitorVideoPlayerPlugin.java#L34-L39,L247-L258`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L34-L39), [`PickerVideoFragment.java#L59,L80-L130`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/PickerVideo/PickerVideoFragment.java#L59), `ios/Plugin/VideoPicker/`. Manifest/plugin permissions trigger Google Play photo/video declarations for all consuming apps, `url.contains("DCIM")` prompts unexpectedly, and `loadVideos()` queries `MediaStore` synchronously on the UI thread. Next step: delete `PickerVideo/`, `VideoPicker/`, `READ_MEDIA_VIDEO`/`READ_EXTERNAL_STORAGE`, and Picasso/RecyclerView/CardView deps, keeping local `file://` and `content://` playback intact.
+- F9 [P1, CONFIRMED, H/M] **iOS lacks SPM (`Package.swift` + `CAPBridgedPlugin`) and 3 documented API methods** — [`CapacitorVideoPlayerPlugin.m#L6-L22`](ios/Plugin/CapacitorVideoPlayerPlugin.m#L6-L22), [`CapacitorVideoPlayerPlugin.swift#L13`](ios/Plugin/CapacitorVideoPlayerPlugin.swift#L13), [`readme.md#L125-L127`](readme.md#L125-L127). New Capacitor 8 iOS apps default to SPM (and Capacitor 9 beta moves further from CocoaPods/Cordova), and `showController`, `isControllerIsFullyVisible`, and `exitPlayer` reject as unimplemented on iOS. Next step: add `Package.swift`, adopt `CAPBridgedPlugin`, and implement the 3 missing methods.
+- F15 [P1, CONFIRMED, M/S] **SAF / `@capacitor/filesystem` `content://` URIs fail on Android** — [`FilesUtils.java#L16-L32`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Utilities/FilesUtils.java#L16-L32), [`FullscreenExoPlayerFragment.java#L1050`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1050). `getFilePath()` returns `null` for `content://` URIs, and `initializePlayer()` only routes `content://media` to `DefaultDataSource`, rejecting SAF document URIs as "Video file not found". Next step: pass `content://` URIs through `FilesUtils.getFilePath()` and route `content://` in `initializePlayer()` to `DefaultDataSource`.
+- F16 [P1, CONFIRMED, M/S] **End users see `"Device is a TV"` debug toast and generic `"Video Url not found"` on all playback errors** — [`FullscreenExoPlayerFragment.java#L314-L331,L411-L414`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L314-L331). Deprecated `onPlayerStateChanged` maps every `STATE_IDLE` (including codec, TLS, or 403/404 errors) to `"Video Url not found"` without implementing `onPlayerError`. Next step: migrate to `onPlaybackStateChanged` + `onPlayWhenReadyChanged` + `onPlayerError`, surface error details to JS, and remove the TV toast.
+- F20 [P2, CONFIRMED, M/S] **Deprecated fullscreen flags and `setRequestedOrientation` ignored on Android 16 large screens** — [`FullscreenExoPlayerFragment.java#L258-L263,L440,L974-L981`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L258-L263). `FLAG_FULLSCREEN` / `SYSTEM_UI_FLAG_*` are deprecated under edge-to-edge enforcement, and Android 16 ignores `setRequestedOrientation` on displays ≥600dp (`SourceLockedOrientationActivity` lint warning). Next step: adopt `WindowInsetsControllerCompat` and document large-screen orientation behavior.
+- F23 [P2, CONFIRMED, M/S] **Cast, DASH, and SmoothStreaming always bundled (`chromecast: true` default)** — [`android/build.gradle#L60-L67`](android/build.gradle#L60-L67), [`src/definitions.ts#L217`](src/definitions.ts#L217). Pulls Play Services Cast into offline/rural APKs where Google Play Services may be absent or APK size matters. Next step: document/gate optional Cast dependency via Gradle property if APK budget becomes a priority.
 
-**Fix:** fix/remove `isApplicationSentToBackground` and default `bkmodeEnabled` to `false` immediately; later use Media3 `MediaSessionService` if true background audio playback is needed, or remove background mode and document PiP as the supported multitasking mode.
+## Architecture
 
-### 2.5 🟠 Remove the `url: "internal"` Video Picker and `READ_MEDIA_VIDEO` permissions
-The `url: "internal"` path requests `READ_MEDIA_VIDEO` (and `READ_EXTERNAL_STORAGE`) and opens a custom MediaStore grid picker ([PickerVideo/](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/PickerVideo/)).
-- Google Play's photo/video permissions policy restricts `READ_MEDIA_VIDEO` to apps whose core purpose requires broad media library access. Simply declaring these permissions in the plugin can trigger Play Console policy declarations or rejections for consumer apps—even if they never use `url: "internal"`.
-- The permission prompt is also triggered by a fragile substring check: `url.contains("DCIM") || url.contains("Documents")` ([Plugin L247](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L247)), and `loadVideos()` queries MediaStore synchronously on the main thread (ANR risk).
+- F6 [P1, CONFIRMED, H/L] **Fragment overlay on `BridgeActivity` blocks in-app navigation during PiP** — [`CapacitorVideoPlayerPlugin.java#L1221-L1222`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L1221-L1222), [`FullscreenExoPlayerFragment.java#L664-L730`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L664-L730). Android PiP operates per-`Activity`, so shrinking `BridgeActivity` shrinks the WebView too, preventing users from browsing the app or launching a replacement video while watching in PiP. Next step: move fullscreen playback to a dedicated `singleTask` `PlayerActivity` with `onNewIntent` media swapping and a `PlayerEventBridge`.
+- F17 [P1, CONFIRMED, M/M] **Non-idiomatic bridge contract, untyped errors, and Android type mismatches** — [`src/definitions.ts#L114-L313`](src/definitions.ts#L114-L313), [`package.json#L72-L75`](package.json#L72-L75), [`FullscreenExoPlayerFragment.java#L322,L1810`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L322), [`CapacitorVideoPlayerPlugin.java#L954,L1064`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L954). Errors resolve `{ result: false }` instead of rejecting; all options are optional (`url?: string`); Android emits `currentTime` as a string in play/pause/ready/ended events; `hls.js` is a mandatory `peerDependency` even for native-only consumers; `echo` remains public. Next step: plan a v9 breaking API cleanup (reject on error, typed results, string-literal unions, numeric `currentTime`, `peerDependenciesMeta` optional `hls.js`).
+- F26 [P2, CONFIRMED, M/M] **Capacitor 8/9 dual-compatibility and stack currency gaps** — [`package.json#L73`](package.json#L73), [`android/build.gradle#L22-L25`](android/build.gradle#L22-L25), [`android/proguard-rules.pro#L1-L22`](android/proguard-rules.pro#L1-L22). Checked against current stable releases as of `2026-11-12`: Capacitor stable is `8.6.0` (with `9.0.0-beta.0` in pre-release, defaulting R8 release shrinking and Node 24/SPM), and Media3 stable is `1.11.1` (repo is on `1.9.1`). `android/build.gradle` sets `targetSdkVersion` inside library `defaultConfig` and ships a template-comment-only `proguard-rules.pro`. Next step: add consumer R8 rules, drop `targetSdkVersion` from library `defaultConfig`, widen `@capacitor/core` peer range when ready for v9 compatibility, and evaluate Media3 `1.11.x`.
 
-**Decision:** Drop support for `url: "internal"` and remove the built-in video picker altogether (while keeping full support for local app files and remote HTTP/HLS/DASH streaming).
-- **What gets deleted:** The entire `PickerVideo/` package (4 classes), `fragment_picker_video.xml`, `row_video.xml`, the `VideoPicker/` classes on iOS, the `READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` `@Permission` annotations in `CapacitorVideoPlayerPlugin`, and the `com.squareup.picasso:picasso`, `recyclerview`, and `cardview` dependencies.
-- **Keep local file & URI playback working:** Update `FilesUtils.getFilePath()` so that any `content://` or `file://` URI passed from `@capacitor/filesystem` or an external picker plugin is passed through to Media3 `DefaultDataSource` (while keeping the canonical path traversal checks for `_capacitor_file_` and `application://` paths).
-- **Migration note:** Document the removal of `url: "internal"` clearly in `CHANGELOG.md` and `README.md` as a breaking change for users migrating from `harmonwood/capacitor-video-player`.
+## Code quality
 
-### 2.6 🟠 iOS: no Swift Package Manager support, and missing methods
-- There is no `Package.swift`, and the plugin registers via the legacy `CAP_PLUGIN` macro in [CapacitorVideoPlayerPlugin.m](ios/Plugin/CapacitorVideoPlayerPlugin.m) instead of `CAPBridgedPlugin`. **New Capacitor 8 iOS projects use SPM by default**, so the plugin can't be installed in them without falling back to CocoaPods.
-- The `.m` file doesn't register `showController`, `isControllerIsFullyVisible` or `exitPlayer`, and Swift doesn't implement them either. They are in `definitions.ts` but will reject with "not implemented" on iOS.
-- `s.swift_version = '5.1'` in the podspec is very out of date. iOS state is spread across globals (`isPIPModeAvailable`, `isInPIPMode`, `isInBackgroundMode`). `example-app/TODO.md` still says "Setup and test iOS".
+- F21 [P2, CONFIRMED, M/M] **God plugin boilerplate, shared mutable `ret`/`call`, 21-arg pipeline, and redundant `NotificationCenter`** — [`CapacitorVideoPlayerPlugin.java#L71,L84,L269-L900,L976-L1171`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L269-L900), [`CapacitorVideoPlayer.java#L19-L66`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayer.java#L19-L66), [`NotificationCenter.java#L8-L62`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Notifications/NotificationCenter.java#L8-L62). 17 `@PluginMethod`s repeat ~40 lines each (~600 lines of duplication); `this.ret` and `this.call` leak state across calls; 21 positional args cross 3 classes into public mutable fragment fields; `NotificationCenter` uses a non-re-entrant `MyRunnable` field and re-registers observers on every `initPlayer`. Next step: add a `withPlayer(...)` helper, replace 21 args with an immutable `PlayerConfig` `Bundle`, and replace `NotificationCenter` with a `PlayerEventListener` interface.
+- F22 [P2, CONFIRMED, M/S] **1,859-line `FullscreenExoPlayerFragment` mixes all concerns; `AsyncTask` & unclosed executor** — [`FullscreenExoPlayerFragment.java#L103,L534-L562,L1683`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L534-L562). Single class mixes UI, ExoPlayer, Cast, MediaSession, subtitles, and TV keys; `setCastImage` extends deprecated `AsyncTask` and decodes remote streams with no timeouts or downsampling (OOM risk); `Executors.newSingleThreadExecutor()` is never shut down. Next step: extract `PlayerController` / `CastController` / `PipController` and replace `AsyncTask` + leaked executor with bounded lifecycle-aware loading.
+- F24 [P2, CONFIRMED, L/S] **Dead layouts, unused dependencies, and obsolete `SDK_INT < 24` branches** — [`exoplayer_layout_youtube.xml`](android/src/main/res/layout/exoplayer_layout_youtube.xml), [`bridge_layout_main.xml`](android/src/main/res/layout/bridge_layout_main.xml), [`android/build.gradle#L55-L58`](android/build.gradle#L55-L58), [`FullscreenExoPlayerFragment.java#L748,L837,L946`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L748). Two XML layouts and `gridlayout` / `coordinatorlayout` dependencies are unused (`constraintlayout:2.0.4` / `recyclerview:1.2.0` are outdated); 7 `ObsoleteSdkInt` lint warnings remain despite `minSdk 24`. Grouped style note: iOS `CapacitorVideoPlayerPlugin.swift` and `FullScreenVideoPlayerView.swift` carry `swiftlint:disable` overrides for `file_length`, `type_body_length`, `function_body_length`, `cyclomatic_complexity`, and `function_parameter_count`, and duplicate global state variables (`isInPIPMode`, etc.) in [`AVPlayerViewController.swift#L11-L16`](ios/Plugin/Extensions/CapacitorVideoPlayerPlugin.AVPlayerViewController.swift#L11-L16). Next step: delete dead XMLs/deps/SDK<24 branches and encapsulate iOS player state on the instance.
 
-### 2.7 🟡 Smaller user-facing issues
-- **Debug toasts & deprecated Media3 listener:** "Device is a TV" ([L413](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L413)) shows to end users. The player listener overrides the deprecated `onPlayerStateChanged(boolean playWhenReady, int state)` ([L314](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L314)) instead of `onPlaybackStateChanged` + `onPlayWhenReadyChanged` + `onPlayerError`, and shows "Video Url not found" on *any* `STATE_IDLE` ([L327-L331](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L327-L331)), so real playback errors are never reported to JS with a cause. All toasts are hard-coded English.
-- **Credentials can leak into logcat:** `Log.v(TAG, "headers: " + headers)` ([Plugin L241](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L241)) logs request headers, which often carry `Authorization` tokens.
-- **`content://` URIs** that aren't `content://media` return `null` from `FilesUtils.getFilePath`. Files picked via SAF or `@capacitor/filesystem` content URIs fail with "file not found".
-- **Fullscreen and orientation:** `FLAG_FULLSCREEN` and `SYSTEM_UI_FLAG_*` are deprecated. Use `WindowInsetsControllerCompat`, especially with Android 15+ edge-to-edge enforcement. On Android 16, `setRequestedOrientation` is **ignored on large screens (≥600dp)**, so `displayMode: landscape|portrait` silently does nothing on tablets and foldables.
-- **APK size and devices without Google services:** `media3-cast` (and so Play Services Cast), DASH, SmoothStreaming and Picasso are always bundled, and `chromecast` defaults to `true`. If your users are on low-end devices or bandwidth-limited installs, a Gradle flag to leave cast out would be a meaningful saving.
-- **TV D-pad fast-forward never works.** `mDuration` is declared but never assigned, so `position < mDuration - videoStep` ([L1249](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1249)) is always false.
-- **Playback position is lost on recreation.** `onSaveInstanceState` saves `PLAYBACK_TIME` and it's read back into `mCurrentPosition` ([L441](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L441)), but that value is never used, so the video restarts from 0.
-- **Threads and deprecated APIs:** `AsyncTask` (deprecated) is used for cast artwork. Each fragment creates a `newSingleThreadExecutor()` that is never shut down. `artwork != ""` compares by reference ([L534](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L534), [L1608](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1608)).
+## Bugs
 
----
+- F2 [P0, CONFIRMED, H/S] **Android back navigation fails when host targets SDK 36 (Android 16+)** — [`FullscreenExoPlayerFragment.java#L455-L490`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L455-L490). Predictive back stops delivering `KEYCODE_BACK` to `View.OnKeyListener`, so back gestures navigate the underlying Capacitor WebView instead of closing or PiP-ing the player. Next step: register an `OnBackPressedCallback` via `requireActivity().getOnBackPressedDispatcher()` with `getViewLifecycleOwner()`.
+- F3 [P0, CONFIRMED, H/M] **`static ExoPlayer player` and `static ImageView cast_image` cause lifecycle NPEs and leaks** — [`FullscreenExoPlayerFragment.java#L135,L152`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L135-L152). Multiple fragment lifecycles share and release the same `player`, forcing defensive thread-hopping wrappers (`play()`, `pause()`, `releasePlayer()`), while static `cast_image` retains destroyed `Activity` contexts (`StaticFieldLeak` x2). Next step: convert both to instance fields owned by one lifecycle and remove redundant main-thread re-posting guards.
+- F4 [P0, CONFIRMED, H/S] **PiP `onStop()` kills the host app; `initPlayer()` fails while player is active** — [`FullscreenExoPlayerFragment.java#L775-L778`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L775-L778), [`CapacitorVideoPlayerPlugin.java#L1207-L1209`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L1207-L1209). Closing PiP calls `activity.finishAndRemoveTask()`, terminating `BridgeActivity` and losing app state; calling `initPlayer()` while a player exists fails with `"FrameLayout for ExoPlayer already exists"`. Next step: remove `finishAndRemoveTask()` and replace/teardown any existing player on `initPlayer()`.
+- F7 [P1, CONFIRMED, H/S] **`isApplicationSentToBackground()` always returns `true`, preventing pause on focus loss** — [`FullscreenExoPlayerFragment.java#L834-L854,L1658-L1676`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1658-L1676), [`CapacitorVideoPlayerPlugin.java#L63`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L63). Checking `myPid()` in `getRunningAppProcesses()` is always true, so `onPause()` with default `bkmodeEnabled: true` keeps calling `play()` even on phone calls or notification shade; real background audio also lacks a `MediaSessionService`. Next step: remove/fix `isApplicationSentToBackground()` and default `bkmodeEnabled` to `false`.
+- F11 [P1, CONFIRMED, H/S] **iOS `exit(1)` termination, force-unwrap crash, broken `getMuted()`, observer leak, and hanging calls** — [`FullScreenVideoPlayerView.swift#L353-L358,L418-L420,L456-L492,L543`](ios/Plugin/VideoPlayer/FullScreenVideoPlayerView.swift#L456-L492), [`CapacitorVideoPlayerPlugin.swift#L258-L626`](ios/Plugin/CapacitorVideoPlayerPlugin.swift#L258-L626). `srtSubtitleToVtt` calls `exit(1)` on error and returns `vttURL` before the async `URLSession` download completes; `URL(string: artwork)!` force-unwraps invalid artwork strings; `getMuted()` returns `((self.player?.isMuted) != nil)` (always `true`); `removeObservers()` never invalidates `videoPlayerMoveObserver`; 13 plugin methods (`isPlaying`–`setRate`) omit an `else` branch when `mode != "fullscreen"` or `playerId` mismatches, leaving promises pending forever. Next step: remove `exit(1)` and `!`, fix `getMuted()`, invalidate `videoPlayerMoveObserver`, and resolve/reject all unmatched plugin calls.
+- F14 [P1, CONFIRMED, M/S] **Web plugin double-wraps `initPlayer` result, leaks DOM listeners, and breaks `volume: 0`** — [`src/web.ts#L113,L327,L457,L719-L755`](src/web.ts#L113), [`example-app/src/main.ts#L87`](example-app/src/main.ts#L87). `_initializeVideoPlayer()` returns `{ method, result, value }` and `initPlayer()` wraps it in `{ result: result }`, making `result.result` an object (always truthy even on failure!); `removeListeners()` passes fresh arrow closures to `document.removeEventListener()` so listeners never detach; `options.volume ? options.volume : 0.5` ignores `0`. Next step: return `_initializeVideoPlayer()` result directly, store bound listener refs, and use nullish coalescing (`??`) for numeric options.
+- F18 [P2, CONFIRMED, M/S] **Android `fsPlayerId` NPE on omitted `playerId`, and `setMuted` returns `result: true` on invalid input** — [`CapacitorVideoPlayerPlugin.java#L159-L165,L281,L669`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L159-L165). Setting `mode = _mode` before validating `playerId` leaves `fsPlayerId == null` when `mode == "fullscreen"`, throwing NPE in `fsPlayerId.equals(playerId)` on subsequent control calls; `setMuted` sets `ret.put("result", true)` when `muted` is null. Next step: validate `playerId` before mutating `mode` and fix `setMuted` error result to `false`.
+- F19 [P2, CONFIRMED, M/S] **TV D-pad `fastForward` is dead (`mDuration == 0`) and saved `mCurrentPosition` is ignored** — [`FullscreenExoPlayerFragment.java#L168,L444,L1349,L1650`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1349). `mDuration` is never assigned, so `position < mDuration - videoStep` is always false; `mCurrentPosition` restored from `savedInstanceState` is never fed into `playbackPosition`. Next step: query `player.getDuration()` in `fastForward()` and apply saved `PLAYBACK_TIME` to `playbackPosition`.
 
-## 3. API / TypeScript surface
+## Security
 
-- **Errors are resolved, not rejected.** Every failure is `call.resolve({result:false, message})`. Consumers have to remember to check `result`, and `try/catch` never fires. That doesn't match Capacitor conventions.
-- **The types are loose.** All options are optional, including required ones like `playerId`, `url` and `mode`. `mode` and `displayMode` are `string`, not unions. The result type is `value?: any`.
-- **Android sends the wrong types.** In play/pause/ready/ended events, Android puts `currentTime` as a **string** (`String.valueOf(...)`), but it's typed `number`, and `playerExit` sends an int. `dismiss` is passed around as the string `"1"` and parsed with `Integer.valueOf`.
-- **`playerId` is ceremony.** Native code only supports one fullscreen player, and `playerId` mostly guards against typos. `echo` is template leftover and ships in the public API.
-- A good candidate for a **v9 breaking cleanup**: reject on error, a typed result per method, string-literal unions, drop `echo`, and decide whether `playerId` means anything on native.
-- `hls.js` is a **required** peer dependency, even for native-only users. Mark it optional via `peerDependenciesMeta`.
+- F12 [P1, CONFIRMED, M/S] **Request headers logged verbatim to Android logcat** — Source [`src/definitions.ts#L192-L194`](src/definitions.ts#L192-L194) (`options.headers`) → sink [`CapacitorVideoPlayerPlugin.java#L241`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L241) (`Log.v(TAG, "headers: " + headers)`). Leaks `Authorization` / bearer tokens and cookies to device logs readable by debugging tools or crash collectors. Next step: remove header logging or log header keys only.
+- F13 [P1, CONFIRMED, M/S] **iOS file path resolver lacks traversal checks and crashes on malformed `file:///var/mobile/` URLs** — Source `options.url` / `options.subtitle` ([`CapacitorVideoPlayerPlugin.swift#L189,L206`](ios/Plugin/CapacitorVideoPlayerPlugin.swift#L189)) → sink [`CapacitorVideoPlayerPlugin.File.swift#L47-L108`](ios/Plugin/Extensions/CapacitorVideoPlayerPlugin.File.swift#L47-L108). `application://` joins unsanitized relative segments onto `docPath` without canonicalisation (`..` traversal); `file:///var/mobile/Containers` and `file:///var/mobile/` index `pathArray[1]` / `fPathArray[1]` and `.dropFirst(38)` without bounds checks (out-of-bounds crash) and pass `URL.absoluteString` (`file:///...`) to `FileManager.fileExists(atPath:)`. Next step: canonicalise via `URL.standardizedFileURL.path`, verify app-directory containment, and replace unchecked array slicing with safe `URL` path handling.
 
----
+## AI-first workflow
 
-## 4. Tooling & the AI-assisted workflow
+- F1 [P0 -> **FIXED in PR #38 (`417e4a9`)**, CONFIRMED, H/S] **CI workflow broken on `main` due to unquoted YAML colon** — [`.github/workflows/ci.yml#L60,L103,L162`](.github/workflows/ci.yml#L60). `2b50c74` introduced `- name: Fail-fast: cancel workflow on failure` (unquoted `: `), failing `ruby -ryaml` (`mapping values are not allowed in this context at line 60 column 24`) and failing runs `43279130576`, `43276432495`, `43275210687` at 0s. **Resolution:** [`PR #38`](https://github.com/e-picsa/capacitor-video-player/pull/38) (`417e4a9`) renamed the three step names to `'Cancel on failure'`, `ruby -ryaml` now passes, and CI run `43297172534` passed all 3 jobs (`Lint & Web Build`, `Android Build & Lint`, `Android Instrumented Tests (API 35)`).
+- F5 [P0, CONFIRMED, H/M] **iOS native build fails locally (`IPHONEOS_DEPLOYMENT_TARGET = 13.0`) and iOS CI is disabled** — [`ios/Plugin.xcodeproj/project.pbxproj#L498,L559,L582,L608`](ios/Plugin.xcodeproj/project.pbxproj#L498), committed `ios/Pods/Pods.xcodeproj`, [`.github/workflows/ci.yml#L168-L189`](.github/workflows/ci.yml#L168-L189). `xcodebuild` fails immediately against Xcode 27 / iOS 27.2 SDK (minimum supported 15.0). Next step: bump `IPHONEOS_DEPLOYMENT_TARGET` to `15.0` (and Swift ≥5.5), stop committing `ios/Pods/`, and enable the `ios-build` CI job.
+- F10 [P1, CONFIRMED, H/S] **Android Lint hides 104 `UnsafeOptInUsageError` errors and 79 warnings** — [`android/build.gradle#L36-L38`](android/build.gradle#L36-L38). `lintOptions { abortOnError = false }` makes `./gradlew :capacitor-video-player:lintDebug` exit 0 despite 104 errors (Media3 `@UnstableApi` usages without `@OptIn`) and 2 `StaticFieldLeak` warnings. Next step: add `@OptIn(UnstableApi.class)` where needed, fix/baseline warnings, and remove `abortOnError = false`.
+- F25 [P2, CONFIRMED, M/S] **Workspace dirt on Gradle runs, ESLint 8 EOL, no-op `npm test`, and stale docs** — `android/.gradle/buildOutputCleanup/*`, `android/.idea/`, `ios/Pods/` are git-tracked (running `android/gradlew test` dirties the working tree); [`package.json#L29,L38,L49,L63`](package.json#L49) has EOL ESLint 8 (warns on TS 5.9.3), `"test": "echo \"No test specified\""`, `verify:android` targeting `android/` (0 tests) instead of `example-app/android/`, and stale `homepage` (`capacitorvideoplayer.com`) + `docs/Usage_2.4.7.md` / `docs/Notes_Exoplayer2.18.1.md`; `AGENTS.md` lacks exact local `npm run lint` / `JAVA_HOME` / `example-app` verify steps. Next step: untrack `.gradle`/`.idea`/`Pods`, add `verify` & `AGENTS.md` commands, and clean stale docs.
 
-Shipping fast with AI-written changes only works if **the machine checks what the reviewer can't**. Right now:
+## Roadmap (fixed schema — the table is the single source)
 
-- CI ([.github/workflows](.github/workflows)) only runs `npm run build` (TS) on PRs. **No Gradle build, no Android lint, no `xcodebuild`, no instrumented tests.** The lifecycle tests you wrote never run automatically. `npm test` is `echo "No test specified"`.
-- `lintOptions { abortOnError = false }` (deprecated DSL) means Android Lint findings are never surfaced.
-- ESLint 8 is end-of-life (legacy `.eslintignore` and `eslintConfig`), and `npm run lint` includes `swiftlint`, which isn't run anywhere.
-- `ios/Pods/` and `android/.idea/` are committed. `docs/` has stale material (`Usage_2.4.7.md`, `Notes_Exoplayer2.18.1.md`), and `homepage` points at the old upstream site.
+Value H/M/L: H removes a crash, data loss, or blocker for a primary archetype or a major maintenance burden; M is clear pain for a subset of users or meaningful toil removed; L is nice-to-have with limited reach. Effort S/M/L (never days): S is likely one file, covered by automated tests, easy to review; M is a few files or needs extra test/review care; L touches many files or needs heavy human oversight.
 
-**Recommended CI (highest ROI item in this report):**
-1. `npm ci && npm run lint && npm run build` (ubuntu)
-2. `cd example-app && npm run build && cd android && ./gradlew lint assembleDebug` (ubuntu, JDK 21)
-3. Android instrumented tests on an emulator (`reactivecircus/android-emulator-runner`) running `FullscreenExoPlayerFragmentTest`, ideally including an API 36 image
-4. `xcodebuild` for the plugin (macos runner), plus an SPM build once `Package.swift` exists
+| ID | Type | Title | Beneficiary | Value | Effort | Depends on | Done when | From |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| R1 | Quick win | ~~Fix YAML syntax in `.github/workflows/ci.yml`~~ (**Done — PR #38**) | Maintainers, all PRs | H | S | none | ✅ Merged in [PR #38](https://github.com/e-picsa/capacitor-video-player/pull/38) (`417e4a9`); `ruby -ryaml` passes and CI run `43297172534` passed all 3 jobs | F1 |
+| R2 | Quick win | Replace `KEYCODE_BACK` `OnKeyListener` with `OnBackPressedCallback` | Android 16+ users | H | S | none (R1 done) | Back gesture exits/PiPs player on API 36 emulator + instrumented test | F2 |
+| R3 | Quick win | Remove `finishAndRemoveTask()` on PiP `onStop()` and replace active player on `initPlayer()` | App devs, end users | H | S | none (R1 done) | Closing PiP preserves `BridgeActivity`, re-calling `initPlayer()` replaces player | F4 |
+| R4 | Quick win | Fix `isApplicationSentToBackground()` and default `bkmodeEnabled` to `false` | End users, app devs | H | S | none (R1 done) | Player pauses on focus loss / call; `bkmodeEnabled` defaults `false` in plugin + TS | F7 |
+| R5 | Quick win | Fix iOS deployment target `15.0`, untrack `Pods`/`.gradle`/`.idea`, enable iOS CI | Maintainers, iOS devs | H | M | none (R1 done) | `xcodebuild` succeeds locally and in CI; `gradlew test` leaves `git status` clean | F5, F25 |
+| R6 | Quick win | Fix Android Lint 104 `UnsafeOptInUsageError`s and remove `abortOnError = false` | Maintainers | H | S | none (R1 done) | `:capacitor-video-player:lintDebug` passes with 0 errors and `abortOnError` enabled | F10 |
+| R7 | Quick win | Fix iOS `exit(1)`, `artwork!` force-unwrap, `getMuted()`, observer leak, hanging calls, and `File.swift` bounds/traversal | iOS users & devs | H | M | R5 | No `exit(1)`/`!` crashes, `getMuted()` reflects `isMuted`, unmatched calls resolve/reject, safe URL canonicalisation | F11, F13 |
+| R8 | Quick win | Fix Web `initPlayer` double-wrapped result, listener leak, and `volume: 0` fallback | Web / Electron devs | M | S | none (R1 done) | `initPlayer` returns flat `capVideoPlayerResult`, `removeListeners` detaches handlers, `volume: 0` works | F14 |
+| R9 | Quick win | Strip `headers` logcat leak, fix `onPlayerStateChanged` → `onPlayerError`, TV toast, `mDuration`, `mCurrentPosition`, `content://`, `fsPlayerId` NPE, `setMuted` | Android users & devs | M | M | none (R1 done) | Auth headers not logged, `onPlayerError` emitted, SAF `content://` plays, TV FF & state restore tested | F12, F15, F16, F18, F19 |
+| R10 | Strategic | Convert `player` and `cast_image` to instance fields and drop redundant thread-hopping | Android users, maintainers | H | M | R2, R3, R6 | No `static` player/view fields, 0 `StaticFieldLeak` lint warnings, lifecycle instrumented tests pass | F3 |
+| R11 | Strategic | Remove `url: "internal"` video picker (`PickerVideo/`, `VideoPicker/`) and media permissions | App devs (Play Store), end users | H | M | R9 (R1 done) | No `READ_MEDIA_VIDEO`/`READ_EXTERNAL_STORAGE` or Picasso/RecyclerView deps; changelog migration note added | F8 |
+| R12 | Strategic | Deduplicate 17 plugin methods, add `PlayerConfig` `Bundle`, replace `NotificationCenter` with `PlayerEventListener`, split `FullscreenExoPlayerFragment` | Maintainers | M | M | R10, R11 | `withPlayer` helper, immutable `PlayerConfig`, typed listener interface, `WindowInsetsControllerCompat` | F20, F21, F22, F24 |
+| R13 | Strategic | Move fullscreen Android playback to dedicated `singleTask` `PlayerActivity` | App devs, end users | H | L | R10, R12 | Users browse Capacitor app while video plays in PiP; `initPlayer()` swaps media via `onNewIntent` | F6 |
+| R14 | Strategic | Add iOS SPM (`Package.swift` + `CAPBridgedPlugin`) and implement 3 missing iOS methods | iOS app devs (Cap 8/9) | H | M | R5, R7, R11 | `swift build` / SPM integration passes; `showController`, `isControllerIsFullyVisible`, `exitPlayer` work | F9 |
+| R15 | Strategic | v9 API cleanup & Capacitor 8/9 dual compatibility (reject errors, unions, numeric `currentTime`, R8 rules, `MediaSessionService` option) | All app devs | M | M | R12, R13, R14 | Single branch supports Cap 8 & 9 with consumer R8 rules, optional `hls.js` peer, typed rejections | F17, F23, F26 |
 
-With this in place, every agent-written PR gets a real compile-and-lifecycle check before you read it.
+**Completed:** R1 ([PR #38](https://github.com/e-picsa/capacitor-video-player/pull/38))
 
----
+**Quick wins (open):** R2, R3, R4, R5, R6, R7, R8, R9
 
-## 5. Code structure: separation, over- and under-engineering
+**Strategic (open):** R10, R11, R12, R13, R14, R15
 
-### Under-engineered (missing structure)
-- **The god fragment.** [FullscreenExoPlayerFragment.java](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java) (1,734 lines) handles UI binding, player setup, media-source selection by URL sniffing, subtitles, Cast, PiP, MediaSession, background detection, TV key handling and colour parsing. A natural split would be `PlayerController` (ExoPlayer and media sources), `CastController`, `PipController`, and a thin view layer.
-- **A 21-argument config pipeline.** Options are parsed into ~25 mutable fields on the plugin, passed as **21 positional arguments** through `createFullScreenFragment` (twice) and [CapacitorVideoPlayer.java](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayer.java), then assigned to **public mutable fields** on the fragment. A single `PlayerConfig` value object parsed once and passed via `Bundle`/Intent args would:
-  - remove a class of argument-order bugs,
-  - survive process death properly, so the "orphaned fragment" cleanup becomes unnecessary,
-  - make the config testable on its own.
-- **Shared mutable state across calls.** `private final JSObject ret` ([Plugin L84](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L84)) is reused across `initPlayer` calls, so stale `message` keys leak between calls. `this.call = call` is overwritten by *every* method, and the internal-picker path later resolves whichever call happened to be stored last ([L1109](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L1109)).
-- **Java without nullability annotations.** Kotlin is the norm for new Android code in 2026, and its null-safety would have caught most of the NPEs fixed in 8.0.1–8.0.3. A full rewrite isn't worth it on its own, but write *new* classes in Kotlin, or at minimum add `@NonNull/@Nullable`, and convert the fragment as part of the restructure above.
+Strategic notes:
 
-### Over-engineered (more machinery than needed)
-- **A custom `NotificationCenter` event bus** ([Notifications/](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Notifications/)). It's a port of the iOS pattern to Android: a global singleton with string event names, untyped `Map<String,Object>` payloads, and a `MyRunnable` that stores its payload in a mutable field (not re-entrant). It serves one producer (the fragment) and one consumer (the plugin). Observers are added again on every `initPlayer` and only cleared on end/dismiss, so duplicate events are possible, and the singleton holds onto the plugin. **Replace it with a `PlayerEventListener` interface** that the plugin implements and passes to the fragment/activity.
-- **Defensive layering.** `play()`, `pause()` and `releasePlayer()` each check `isFragmentDestroyed`, check the thread and re-post to a main handler, then wrap everything in try/catch. Every caller is already on the main thread (`runOnUiThread` in the plugin). This is the visible residue of repeated AI "add a guard" fixes. Once the player has a single owner (§2.2), most of this can go.
-- **The pass-through `CapacitorVideoPlayer` "implementation" class** only copies arguments onto the fragment. Either give it a real role (owning player state, as with the Capacitor template's intent) or remove it.
-- **Copy-paste method bodies.** 17 `@PluginMethod`s ([L269-L900](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/CapacitorVideoPlayerPlugin.java#L269-L900)) repeat the same ~40-line validate-playerId / runOnUiThread / null-check / resolve pattern. A helper like `withPlayer(call, "play", f -> { f.play(); return true; })` would cut ~600 lines to ~100, and the next fix happens in one place instead of 17.
+- R10 — what breaks today: rotation/recreation and multi-init races release shared `static ExoPlayer` and leak `Activity`; what it unblocks: clean `PlayerActivity` refactor and removal of defensive thread-hopping wrappers; cost of deferral: recurring NPEs in field apps.
+- R11 — what breaks today: `READ_MEDIA_VIDEO` triggers Play Store policy rejections and main-thread ANRs; what it unblocks: slimmer plugin, removing `NotificationPermission` lint suppression and Picasso; cost of deferral: Play Console app rejections for integrating apps.
+- R13 — what breaks today: entering PiP shrinks `BridgeActivity` so users cannot browse the app or switch videos while watching in PiP; what it unblocks: full multitasking PiP with live progress events; cost of deferral: broken multitasking UX for training apps.
+- R14 — what breaks today: Capacitor 8/9 SPM projects cannot install the plugin and 3 API methods reject on iOS; what it unblocks: zero-config SPM adoption and cross-platform parity; cost of deferral: iOS remains unmaintained and unusable in default Cap 8+ apps.
+- R15 — what breaks today: resolved `{result: false}` bypasses `try/catch`, untyped options invite runtime bugs, and Capacitor 9 R8 release builds lack consumer keep rules; what it unblocks: clean Cap 8+9 dual support and predictable TS DX; cost of deferral: manual multi-branch maintenance and release-build R8 breakages.
 
-### Dead code (safe deletions)
-- `res/layout/exoplayer_layout_youtube.xml` (361 lines) and `res/layout/bridge_layout_main.xml` aren't referenced anywhere.
-- The `androidx.gridlayout` and `androidx.coordinatorlayout` dependencies are unused (coordinator is only used in the dead layout above). `recyclerview` 1.2.0 and `constraintlayout` 2.0.4 are several years old.
-- Unused or write-only fields (`isEnded`, `visibilityListener`, `mDuration` and `mCurrentPosition`, which are both bugs, see §2.7), the dead `Build.VERSION_CODES.LOLLIPOP`/`N`/`SDK_INT < 24` branches (minSdk is 24), and commented-out orientation code.
+### Task prompts
 
----
+- R1: "✅ Done in PR #38 (`417e4a9`) — renamed the three `'Fail-fast: cancel workflow on failure'` steps to `'Cancel on failure'` in `.github/workflows/ci.yml:60,103,162`; `ruby -ryaml` and CI run `43297172534` passed (F1)."
+- R2: "Replace `View.OnKeyListener` (`KEYCODE_BACK`) in `FullscreenExoPlayerFragment.java:455-490` with `OnBackPressedCallback` bound to `getViewLifecycleOwner()`, and add an instrumented test (F2)."
+- R3: "Remove `activity.finishAndRemoveTask()` in `FullscreenExoPlayerFragment.java:775-778` and update `CapacitorVideoPlayerPlugin.java:1207-1209` to replace any active player fragment on `initPlayer()` (F4)."
+- R4: "Remove/fix `isApplicationSentToBackground()` in `FullscreenExoPlayerFragment.java:1658-1676` and default `bkmodeEnabled` to `false` in `CapacitorVideoPlayerPlugin.java:63` and `src/definitions.ts:163` (F7)."
+- R5: "Update `IPHONEOS_DEPLOYMENT_TARGET` to `15.0` in `ios/Plugin.xcodeproj/project.pbxproj`, untrack `ios/Pods/`, `android/.idea/`, and `android/.gradle/`, and enable `ios-build` in `.github/workflows/ci.yml` (F5, F25)."
+- R6: "Add `@OptIn(UnstableApi.class)` for Media3 unstable APIs in `FullscreenExoPlayerFragment.java` and remove `lintOptions { abortOnError = false }` from `android/build.gradle:36-38` (F10)."
+- R7: "In `FullScreenVideoPlayerView.swift` and `CapacitorVideoPlayerPlugin.{swift,File.swift}`, remove `exit(1)` and `URL(...)!`, fix `getMuted()`, invalidate `videoPlayerMoveObserver`, resolve/reject unmatched `CAPPluginCall`s, and canonicalise/bounds-check file URLs (F11, F13)."
+- R8: "Fix `initPlayer()` double-wrapping, `removeListeners()` bound function refs, and `volume ?? 0.5` in `src/web.ts:113,327,719-755` (F14)."
+- R9: "In `CapacitorVideoPlayerPlugin.java`, `FilesUtils.java`, and `FullscreenExoPlayerFragment.java`, stop logging `headers`, migrate `onPlayerStateChanged` to `onPlaybackStateChanged` + `onPlayerError`, remove TV toast, support `content://` URIs, fix `mDuration`/`mCurrentPosition`/`fsPlayerId` NPE/`setMuted` (F12, F15, F16, F18, F19)."
+- R10: "Scope refactor of `FullscreenExoPlayerFragment.java` to convert `static ExoPlayer player` and `static ImageView cast_image` (L135, L152) into lifecycle-owned instance fields, verify `releasePlayer()` in `onDestroy()`, strip redundant main-handler re-posts, and pass `:app:connectedAndroidTest` (F3)."
+- R11: "Scope breaking removal of `url: 'internal'` video picker across Android (`PickerVideo/`, `READ_MEDIA_VIDEO`/`READ_EXTERNAL_STORAGE`, Picasso/RecyclerView/CardView deps, `NotificationPermission` lint suppressions) and iOS (`VideoPicker/`), keeping local URI playback and updating `CHANGELOG.md`/`readme.md` (F8)."
+- R12: "Scope modularisation of Android plugin/fragment: collapse 17 `@PluginMethod` wrappers via `withPlayer(...)`, stop sharing `this.ret`/`this.call`, introduce `PlayerConfig` `Bundle`, replace `NotificationCenter` with `PlayerEventListener`, extract `PlayerController`/`CastController`/`PipController`, migrate to `WindowInsetsControllerCompat`, and drop dead XMLs/`SDK_INT < 24` code (F20, F21, F22, F24)."
+- R13: "Scope migration of Android fullscreen playback from overlay Fragment to a dedicated `singleTask` `PlayerActivity` (`supportsPictureInPicture='true'`) with `onNewIntent` media switching and a `PlayerEventBridge` so users can browse the host app and receive progress events while in PiP (F6)."
+- R14: "Scope iOS modernisation: add `Package.swift` and migrate `CapacitorVideoPlayerPlugin` to `CAPBridgedPlugin`, implement `showController`, `isControllerIsFullyVisible`, and `exitPlayer`, update Swift version, encapsulate global PiP/background flags, and verify via `xcodebuild` and SPM build in CI (F9)."
+- R15: "Scope v9 API & Capacitor 8/9 dual-compatibility release: reject errors instead of `{result:false}`, use string-literal unions and numeric `currentTime`, mark `hls.js` optional in `peerDependenciesMeta`, widen `@capacitor/core` peer range, drop library `targetSdkVersion`, add `android/proguard-rules.pro` rules, and optionally gate Cast / add `MediaSessionService` (F17, F23, F26)."
 
-## 6. Phased Roadmap
+## Second opinion (one-shot, no debate)
 
-### Phase 1: Automated Safety Net (Highest ROI for AI-assisted cadence)
-| # | Change | Effort | Impact | Status / Reference |
-| --- | --- | --- | --- | --- |
-| 1 | **Native CI & Toolchain Modernization:** GitHub Actions workflow running TS lint/build (Node 24), Android assembleDebug & lint (`:app:lintDebug :capacitor-video-player:lintDebug`), Android instrumented tests on an emulator (API 35 via `reactivecircus/android-emulator-runner`), and an on-demand pre-release matrix workflow (APIs 24, 28, 33, 34, 35). Upgrades `example-app` to Capacitor 8 standards (SDK 36, minSdk 24, AGP 8.13, Gradle 8.14.3, Java 21). | S | Prevents regressions on all subsequent PRs; provides automated safety net | ✅ Implemented in PR [#35](https://github.com/e-picsa/capacitor-video-player/pull/35) |
-
-### Phase 2: High-Impact Android Stability & Compliance Wins (Small, surgical PRs)
-| # | Change | Effort | Impact |
+| Claim | Verdict | Reviewer note | Human double-check |
 | --- | --- | --- | --- |
-| 2 | **Make `ExoPlayer` and `cast_image` instance fields:** Remove `static` from `player` and `cast_image`, ensure `releasePlayer()` runs cleanly in `onDestroy()`, and strip redundant thread-hopping guards | S–M | Eliminates the root cause of recreation/multi-init NPE crashes and memory leaks |
-| 3 | **Android 16 (SDK 36) Back Navigation:** Replace `View.OnKeyListener` (`KEYCODE_BACK`) with `OnBackPressedCallback` | S | Fixes broken back gesture on Android 16+ |
-| 4 | **PiP & Background hotfixes:** Remove `activity.finishAndRemoveTask()` in `onStop()`, allow `initPlayer()` to replace an already-active player instead of failing, and fix/remove `isApplicationSentToBackground()` | S | Stops PiP close from killing the host app; fixes player never pausing on focus loss |
-| 5 | **Media3 listener & log/toast cleanup:** Migrate to `onPlaybackStateChanged` + `onPlayerError`, remove `"Device is a TV"` toast, stop logging `headers` to logcat, and fix `mDuration` / `mCurrentPosition` | S | Proper error reporting, credential hygiene, working TV fast-forward and state restore |
+| F1 [P0]: `ci.yml` unquoted `Fail-fast: ...` breaks all CI | Agree | `ruby -ryaml` fails at line 60 col 24; 3 identical unquoted steps at lines 60, 103, and 162 | Inspect failed run `43279130576` in Actions UI; after quoting, confirm PR workflow parses and triggers |
+| F2 [P0]: Back button fails on targetSdk 36 (`FullscreenExoPlayerFragment.java:455-490`) | Agree | Only handler is `View.OnKeyListener` + `KEYCODE_BACK`; zero `OnBackPressedDispatcher`/`Callback` refs; `targetSdkVersion 36` confirmed | Test gesture + 3-button back on API 36 emulator with `displayMode` set and verify WebView does not intercept |
+| F4 [P0]: PiP `onStop()` kills host app (`Fragment.java:775-778` + `Plugin.java:1207-1209`) | Agree | `onStop` calls `playerExit()` + `activity.finishAndRemoveTask()` verbatim; re-`initPlayer` fails with `"FrameLayout for ExoPlayer already exists"` | On real device, enter PiP, swipe away PiP to verify task destruction, and call `initPlayer` twice while PiP active |
+| F3 [P0]: `static ExoPlayer player` + `static ImageView cast_image` (`Fragment.java:135,152`) | Agree | Both `static` confirmed; `cast_image` bound from instance view (`L250`); lint XML confirms `StaticFieldLeak`; guards treat symptom | Test rotation + double-`initPlayer` with LeakCanary/Profiler for leaked Activity and cross-fragment player release |
+| F5 [P0]: iOS `xcodebuild` fails, deployment target 13.0 (`project.pbxproj:498`) | Agree | 4× `IPHONEOS_DEPLOYMENT_TARGET = 13.0` (`498,559,582,608`) and `SWIFT_VERSION = 5.0` confirmed; no `Package.swift`; `ci.yml` iOS job commented out | Run `xcodebuild` locally on Xcode 27 after bumping to 15.0 to see whether `Plugin` or committed `Pods` fails next |
 
-### Phase 3: Structural Cleanup & PiP Architecture
-| # | Change | Effort | Impact |
-| --- | --- | --- | --- |
-| 6 | **Remove `url: "internal"` video picker & media permissions:** Delete `PickerVideo/` (Android) and `VideoPicker/` (iOS), remove `READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` permissions and Picasso/RecyclerView/CardView deps, allow standard `content://` URIs in `FilesUtils`, and document the breaking change for upstream migrators. *Note: Once Picasso is removed, also remove the temporary `NotificationPermission` lint suppression from `example-app/android/app/build.gradle` and `AndroidManifest.xml`.* | S–M | Eliminates Google Play policy rejections, ANR risk, dead dependencies, and unused notification permission warnings |
-| 7 | **Deduplicate plugin & replace `NotificationCenter`:** Collapse the 17 copy-pasted `@PluginMethod` wrappers into a shared helper, stop sharing `this.ret` / `this.call` across calls, introduce an immutable `PlayerConfig` (`Bundle`/`Parcelable`), and replace `NotificationCenter` with a typed `PlayerEventListener` + periodic progress callback | M | Cuts ~600 lines of boilerplate; enables reliable playback progress tracking in JS |
-| 8 | **Dedicated `PlayerActivity` (`singleTask`, `supportsPictureInPicture`):** Move fullscreen playback from an overlay Fragment to `PlayerActivity` with `onNewIntent` media swapping (for launching a new video while in PiP) and a `PlayerEventBridge` back to the plugin | L | Enables browsing the Capacitor app while watching in PiP, seamless video replacement in PiP, and clean process-death recovery |
+**Gap candidates (misses the draft may have):**
 
-### Phase 4: iOS Parity, Capacitor 9 Dual Support & Plugin API Cleanup
-| # | Change | Effort | Impact |
-| --- | --- | --- | --- |
-| 9 | **iOS modernization:** Add `Package.swift` + `CAPBridgedPlugin` for Capacitor 8 SPM support, implement the 3 missing methods (`showController`, `isControllerIsFullyVisible`, `exitPlayer`), and verify in CI | M | Unblocks new Capacitor 8 iOS apps using SPM |
-| 10 | **Capacitor 8 & Capacitor 9 Dual Compatibility (Single Branch):** Follow the pattern in [`e-picsa/capacitor-resumable-download#12`](https://github.com/e-picsa/capacitor-resumable-download/pull/12) to support both Capacitor 8 and 9 host apps on a single `main` branch. Expand peer range to `"@capacitor/core": "^8.0.0 || ^9.0.0"`, configure Android SDKs via `safeExtGet` fallback (`compileSdk: 37`, `minSdk: 24`), omit `targetSdk` from library `defaultConfig`, add consumer R8 rules (`proguard-rules.pro`), and audit native APIs to avoid branching maintenance during major refactors | M | Enables seamless adoption by both Capacitor 8 and 9 hosts without maintaining multiple release branches |
-| 11 | **v9 plugin API cleanup & optional background service:** Reject promises on error instead of resolving `{result:false}`, fix Android `currentTime` string-vs-number mismatch, tighten TS option types, drop `echo`, and optionally add a Media3 `MediaSessionService` if background audio is needed | M | Clean, predictable TypeScript DX |
+- [`ios/Plugin/VideoPlayer/FullScreenVideoPlayerView.swift#L576`](ios/Plugin/VideoPlayer/FullScreenVideoPlayerView.swift#L576) (and `L353-358`): `periodicTimeObserver` added in `setNowPlayingInfo()` is never removed (`removeObservers()` only invalidates 4 observers and there is no `deinit`), leaking observers and duplicating `MPNowPlayingInfoCenter` updates across plays.
+- [`android/.../FullscreenExoPlayerFragment.java#L1177`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L1177): `setReadTimeoutMs(1800000)` (30 minutes) with no retry causes stalled low-bandwidth streams to hang rather than timing out and surfacing an error to JS.
+- [`android/.../FullscreenExoPlayerFragment.java#L768-L769`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/FullscreenExoPlayerFragment.java#L768-L769): `onStop()` computes `isAppBackground` and never uses it (dead code; non-PiP background releases nothing, diverging from `onPause()`).
+- [`ios/Plugin/Extensions/CapacitorVideoPlayerPlugin.File.swift#L81,L103`](ios/Plugin/Extensions/CapacitorVideoPlayerPlugin.File.swift#L81): `URL(fileURLWithPath: fPath)` passes `fPath` derived from `URL.absoluteString` (`file:///...`), producing malformed `file:///file:///...` URLs in addition to the `fileExists(atPath:)` bug.
+- [`src/web.ts#L173`](src/web.ts#L173) (and [`src/web-utils/videoplayer.ts#L140,L149`](src/web-utils/videoplayer.ts#L140)): bare `await videoEl.play()` without `try/catch` turns browser autoplay-policy rejections into unhandled promise rejections.
+- [`android/.../Utilities/FilesUtils.java#L17-L19`](android/src/main/java/com/jeep/plugin/capacitor/capacitorvideoplayer/Utilities/FilesUtils.java#L17-L19): `file:///` passthrough returns arbitrary file paths without canonicalisation/containment checks (so the strength note should be read as scoped to `_capacitor_file_` and `application://` only).
+- [`src/web.ts#L80,L327,L392,L457`](src/web.ts#L80): the same truthy-fallback bug noted for `volume: 0` (`F14`) also affects `options.rate` (`? ... : 1.0`), `options.seektime` (`? ... : 0`), and `options.muted`.
+
+- **Reviewer:** `opencode-go/muse-spark-1.3-contributor` (`variant: xhigh`), `2026-11-12`. **Checked:** independently read `.agents/skills/repo-audit/repo-context.md`, `FullscreenExoPlayerFragment.java` (1–1858), `CapacitorVideoPlayerPlugin.java` (1–1266), `.github/workflows/ci.yml`, `android/build.gradle`, `FullScreenVideoPlayerView.swift` (1–601), `CapacitorVideoPlayerPlugin.swift` (1–632), `CapacitorVideoPlayerPlugin.File.swift` (1–126), `src/web.ts` (1–756), `src/web-utils/videoplayer.ts` (1–343), `example-app/src/main.ts`, `package.json`, and `git show 4a4a06d:AUDIT.md`; ran read-only `ruby -ryaml`, `grep`/`sed`, and lint XML severity count checks. **Skipped:** `xcodebuild`, `./gradlew lintDebug`, emulator tests, `swiftlint`, and `npm run lint`/`build` (relied on source + draft appendix + committed lint XML).
+- **Conflicts and gaps are left to the human; draft was changed only for:** expanding the Top summary `F1` citation from `:60` to `:60,103,162`.
+
+## Appendix — commands and outputs
+
+```text
+$ npm run lint
+> eslint . --ext ts
+WARNING: You are currently running a version of TypeScript which is not officially supported by @typescript-eslint/typescript-estree.
+SUPPORTED TYPESCRIPT VERSIONS: >=3.3.1 <5.2.0
+YOUR TYPESCRIPT VERSION: 5.9.3
+/Users/chrismclarke/Apps/e-picsa/capacitor-video-player/example-app/src/main.ts
+  39:65  warning  'e' is defined but never used     @typescript-eslint/no-unused-vars
+  44:66  warning  'data' is defined but never used  @typescript-eslint/no-unused-vars
+  50:5   warning  Forbidden non-null assertion      @typescript-eslint/no-non-null-assertion
+  ...
+✖ 6 problems (0 errors, 6 warnings)
+> prettier "**/*.{css,html,ts,js,java}" --plugin=prettier-plugin-java --check
+All matched files use Prettier code style!
+> node-swiftlint lint
+!!! WARN: SwiftLint not found in PATH.
+
+$ npm run build
+✔️ DocGen Output: .../dist/docs.json
+✔️ DocGen Output: .../docs/API.md
+dist/esm/index.js → dist/plugin.js, dist/plugin.cjs.js...
+created dist/plugin.js, dist/plugin.cjs.js in 39ms
+
+$ ruby -ryaml -e "YAML.safe_load_file('.github/workflows/ci.yml')"   # on 8861721 before PR #38
+Psych::SyntaxError: (.github/workflows/ci.yml): mapping values are not allowed in this context at line 60 column 24
+
+$ gh run view --repo e-picsa/capacitor-video-player 43279130576
+X main .github/workflows/ci.yml · 43279130576
+X This run likely failed because of a workflow file issue.
+
+$ ruby -ryaml -e "Dir['.github/workflows/*.yml'].each { |f| YAML.safe_load_file(f) }; puts 'All workflow YAML files valid'"   # on 417e4a9 after PR #38
+All workflow YAML files valid
+
+$ gh run view --repo e-picsa/capacitor-video-player 43297172534
+✓ fix/ci-yaml-step-name CI e-picsa/capacitor-video-player#38 · 43297172534
+✓ Android Build & Lint in 1m42s
+✓ Lint & Web Build in 16s
+✓ Android Instrumented Tests (API 35) in 3m7s
+
+$ (cd example-app/android && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/Users/chrismclarke/Library/Android/sdk ./gradlew :capacitor-video-player:lintDebug :app:lintDebug assembleDebug --no-daemon)
+BUILD SUCCESSFUL in 10s
+# android/build/reports/lint-results-debug.html -> Lint Report: 104 errors and 79 warnings
+# (104 UnsafeOptInUsageError, 2 StaticFieldLeak, 1 SourceLockedOrientationActivity, 15 PrivateResource, 7 ObsoleteSdkInt, 20 ContentDescription, 14 HardcodedText, 12 GradleDependency, ...)
+
+$ (cd ios && xcodebuild -workspace Plugin.xcworkspace -scheme Plugin -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build)
+/Users/chrismclarke/Apps/e-picsa/capacitor-video-player/ios/Pods/Pods.xcodeproj: error: The iOS deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0, but the range of supported deployment target versions is 15.0 to 27.2.x. (in target 'CapacitorCordova' from project 'Pods')
+/Users/chrismclarke/Apps/e-picsa/capacitor-video-player/ios/Plugin.xcodeproj: error: The iOS deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0, but the range of supported deployment target versions is 15.0 to 27.2.x. (in target 'Plugin' from project 'Plugin')
+** BUILD FAILED **
+```
