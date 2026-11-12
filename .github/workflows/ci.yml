@@ -81,7 +81,7 @@ jobs:
       - name: Compile and Lint Android (example-app & plugin)
         run: |
           cd example-app/android
-          ./gradlew lint assembleDebug
+          ./gradlew :app:lintDebug :capacitor-video-player:lintDebug assembleDebug
 
   android-instrumented-tests:
     name: Android Instrumented Tests (API ${{ inputs.api_level || '35' }})
