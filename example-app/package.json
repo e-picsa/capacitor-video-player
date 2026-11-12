@@ -10,6 +10,7 @@
   "scripts": {
     "start": "vite",
     "build": "npm i && vite build && npx cap sync",
+    "build:android": "vite build && npx cap sync android",
     "preview": "vite preview"
   },
   "dependencies": {
