@@ -57,7 +57,7 @@ jobs:
       - name: Build plugin package
         run: npm run build
 
-      - name: Fail-fast: cancel workflow on failure
+      - name: Cancel on failure
         if: failure()
         run: gh run cancel ${{ github.run_id }}
         env:
@@ -100,7 +100,7 @@ jobs:
           cd example-app/android
           ./gradlew :app:lintDebug :capacitor-video-player:lintDebug assembleDebug
 
-      - name: Fail-fast: cancel workflow on failure
+      - name: Cancel on failure
         if: failure()
         run: gh run cancel ${{ github.run_id }}
         env:
@@ -159,7 +159,7 @@ jobs:
           name: android-instrumented-test-reports
           path: example-app/android/app/build/reports/androidTests/connected/
 
-      - name: Fail-fast: cancel workflow on failure
+      - name: Cancel on failure
         if: failure()
         run: gh run cancel ${{ github.run_id }}
         env:
