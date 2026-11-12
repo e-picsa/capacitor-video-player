@@ -167,9 +167,9 @@ With this in place, every agent-written PR gets a real compile-and-lifecycle che
 ## 6. Phased Roadmap
 
 ### Phase 1: Automated Safety Net (Highest ROI for AI-assisted cadence)
-| # | Change | Effort | Impact |
-| --- | --- | --- | --- |
-| 1 | **Native CI:** GitHub Actions workflow running TS lint/build, Android `./gradlew lint assembleDebug`, Android instrumented tests (`FullscreenExoPlayerFragmentTest`), and iOS `xcodebuild` on every PR | S | Prevents regressions on all subsequent PRs |
+| # | Change | Effort | Impact | Status / Reference |
+| --- | --- | --- | --- | --- |
+| 1 | **Native CI & Toolchain Modernization:** GitHub Actions workflow running TS lint/build (Node 24), Android assembleDebug & lint (`:app:lintDebug :capacitor-video-player:lintDebug`), Android instrumented tests on an emulator (API 35 via `reactivecircus/android-emulator-runner`), and an on-demand pre-release matrix workflow (APIs 24, 28, 33, 34, 35). Upgrades `example-app` to Capacitor 8 standards (SDK 36, minSdk 24, AGP 8.13, Gradle 8.14.3, Java 21). | S | Prevents regressions on all subsequent PRs; provides automated safety net | ✅ Implemented in PR [#35](https://github.com/e-picsa/capacitor-video-player/pull/35) |
 
 ### Phase 2: High-Impact Android Stability & Compliance Wins (Small, surgical PRs)
 | # | Change | Effort | Impact |
@@ -182,7 +182,7 @@ With this in place, every agent-written PR gets a real compile-and-lifecycle che
 ### Phase 3: Structural Cleanup & PiP Architecture
 | # | Change | Effort | Impact |
 | --- | --- | --- | --- |
-| 6 | **Remove `url: "internal"` video picker & media permissions:** Delete `PickerVideo/` (Android) and `VideoPicker/` (iOS), remove `READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` permissions and Picasso/RecyclerView/CardView deps, allow standard `content://` URIs in `FilesUtils`, and document the breaking change for upstream migrators | S–M | Eliminates Google Play policy rejections, ANR risk, and dead dependencies |
+| 6 | **Remove `url: "internal"` video picker & media permissions:** Delete `PickerVideo/` (Android) and `VideoPicker/` (iOS), remove `READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` permissions and Picasso/RecyclerView/CardView deps, allow standard `content://` URIs in `FilesUtils`, and document the breaking change for upstream migrators. *Note: Once Picasso is removed, also remove the temporary `NotificationPermission` lint suppression from `example-app/android/app/build.gradle` and `AndroidManifest.xml`.* | S–M | Eliminates Google Play policy rejections, ANR risk, dead dependencies, and unused notification permission warnings |
 | 7 | **Deduplicate plugin & replace `NotificationCenter`:** Collapse the 17 copy-pasted `@PluginMethod` wrappers into a shared helper, stop sharing `this.ret` / `this.call` across calls, introduce an immutable `PlayerConfig` (`Bundle`/`Parcelable`), and replace `NotificationCenter` with a typed `PlayerEventListener` + periodic progress callback | M | Cuts ~600 lines of boilerplate; enables reliable playback progress tracking in JS |
 | 8 | **Dedicated `PlayerActivity` (`singleTask`, `supportsPictureInPicture`):** Move fullscreen playback from an overlay Fragment to `PlayerActivity` with `onNewIntent` media swapping (for launching a new video while in PiP) and a `PlayerEventBridge` back to the plugin | L | Enables browsing the Capacitor app while watching in PiP, seamless video replacement in PiP, and clean process-death recovery |
 

@@ -26,6 +26,11 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+    lint {
+        // Temporary suppression: Picasso (used in PickerVideo) references NotificationManager.
+        // Remove this suppression once Picasso is removed in Phase 3 (Item 6).
+        disable 'NotificationPermission'
+    }
 }
 
 repositories {
