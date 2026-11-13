@@ -9,6 +9,18 @@
 
 * upgrade to Capacitor 8 ([#18](https://github.com/e-picsa/capacitor-video-player/issues/18)) ([7da0888](https://github.com/e-picsa/capacitor-video-player/commit/7da08885f3b2431054dd64c8d36a58f87f8ca545))
 
+## [8.1.0](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v8.0.4...capacitor-video-player-v8.1.0) (2026-11-13)
+
+
+### Features
+
+* add ci tests ([#35](https://github.com/e-picsa/capacitor-video-player/issues/35)) ([4a4a06d](https://github.com/e-picsa/capacitor-video-player/commit/4a4a06d2529619d3d557ffe1070d198fa16695be))
+
+
+### Bug Fixes
+
+* **ci:** rename fail-fast step to Cancel on failure in ci.yml ([#38](https://github.com/e-picsa/capacitor-video-player/issues/38)) ([417e4a9](https://github.com/e-picsa/capacitor-video-player/commit/417e4a9b5623b96b58c05b3464c02bfc0d8941b4))
+
 ## [8.0.4](https://github.com/e-picsa/capacitor-video-player/compare/capacitor-video-player-v8.0.3...capacitor-video-player-v8.0.4) (2026-11-11)
 
 
