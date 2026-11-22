@@ -1,8 +1,8 @@
 import type { videoExtension, videoMimeType } from './video-types';
 import { videoTypes } from './video-types';
 
-// hls.js is an optional peer dependency. It must only be loaded for HLS (.m3u8)
-// URLs so non-HLS consumers never download the ~1.3MB library.
+// hls.js is a required peer dependency, lazy-loaded only for HLS (.m3u8)
+// URLs so non-HLS consumers never download the ~1.3MB library at runtime.
 // See https://github.com/e-picsa/capacitor-video-player - HLS is lazy-loaded.
 type HlsConstructor = {
   isSupported(): boolean;
@@ -347,8 +347,8 @@ export class VideoPlayer {
               resolve(true);
             } else {
               console.error(
-                '[VideoPlayer] HLS (.m3u8) requires the optional hls.js peer dependency. ' +
-                  '`npm i hls.js` or use an MP4 URL.',
+                '[VideoPlayer] HLS (.m3u8) requires the hls.js peer dependency. ' +
+                  'Ensure hls.js is installed or use an MP4 URL.',
               );
               resolve(false);
             }

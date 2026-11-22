@@ -106,7 +106,7 @@ No configuration required for this plugin
   assets can externalize it instead of uninstalling (uninstalling breaks Vite/esbuild/Angular
   builds and is undone by the required peer on next install):
   Vite `rollupOptions.external: ['hls.js']` · Angular `externalDependencies: ["hls.js"]` ·
-  Webpack `IgnorePlugin(/^hls\.js$/)`
+  Webpack `IgnorePlugin({ resourceRegExp: /^hls\.js$/ })`
 
 ## Supported methods
 
