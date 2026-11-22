@@ -18,7 +18,10 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            // Keep minification ON: release is what ships to the store, and it is
+            // the only configuration that exercises this plugin's consumer
+            // R8 rules (consumer-rules.pro). Debug stays unminified for speed.
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }

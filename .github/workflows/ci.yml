@@ -98,7 +98,7 @@ jobs:
       - name: Compile and Lint Android (example-app & plugin)
         run: |
           cd example-app/android
-          ./gradlew :app:lintDebug :capacitor-video-player:lintDebug assembleDebug
+          ./gradlew :app:lintDebug :capacitor-video-player:lintDebug assembleDebug assembleRelease
 
       - name: Cancel on failure
         if: failure()
