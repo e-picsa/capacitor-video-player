@@ -1,6 +1,6 @@
 # Optional Cast + HLS (8.1.0 safe default, 9.0.0 lean default)
 
-Two independent opt-outs bundled in one PR — don't confuse them:
+This PR covers two independent opt-outs:
 
 - **Cast = *where* video plays.** Chromecast remote playback to a TV/speaker
   (`media3-cast` + `play-services-cast-framework` + the cast button). Works with plain MP4s —
