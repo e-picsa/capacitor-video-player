@@ -95,18 +95,63 @@ No configuration required for this plugin
 
 ### Reducing bundle size (optional)
 
-- **Cast (Android):** Chromecast remote playback to a TV/speaker. On by default. To remove
-  `play-services-cast-framework` (several MB), set in `android/gradle.properties`:
-  `capacitorVideoPlayerCast=false`
-- **Adaptive streaming (Android):** HLS/DASH/SmoothStreaming (`.m3u8`/`.mpd`/`.ism`). On by
-  default. MP4-only apps can set in `android/gradle.properties`:
-  `capacitorVideoPlayerAdaptive=false` (those URLs then fall back to progressive)
-- **HLS (Web):** only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only
-  when required and stays installed by default. MP4-only apps that want zero bytes in web
-  assets can externalize it instead of uninstalling (uninstalling breaks Vite/esbuild/Angular
-  builds and is undone by the required peer on next install):
-  Vite `rollupOptions.external: ['hls.js']` · Angular `externalDependencies: ["hls.js"]` ·
-  Webpack `IgnorePlugin({ resourceRegExp: /^hls\.js$/ })`
+Everything below defaults to on. Only opt out of what you don't play.
+
+#### Android: Chromecast
+
+Remote playback to a TV/speaker. On by default. To remove
+`play-services-cast-framework` (several MB):
+
+```properties
+# android/gradle.properties
+capacitorVideoPlayerCast=false
+```
+
+The cast button is then hidden and videos play locally.
+
+#### Android: adaptive streaming
+
+HLS/DASH/SmoothStreaming (`.m3u8`/`.mpd`/`.ism`). On by default. MP4-only apps can drop
+those native libraries:
+
+```properties
+# android/gradle.properties
+capacitorVideoPlayerAdaptive=false
+```
+
+Those URLs then fall back to progressive playback.
+
+#### Web: HLS
+
+Only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only when required
+and stays installed by default. MP4-only apps that want zero bytes in web assets can
+externalize it instead of uninstalling (uninstalling breaks Vite/Angular builds and the
+required peer reinstalls it on next install).
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: { external: ['hls.js'] },
+  },
+});
+```
+
+```jsonc
+// angular.json → projects → app → architect → build → options
+{
+  "externalDependencies": ["hls.js"]
+}
+```
+
+```js
+// webpack.config.js
+const webpack = require('webpack');
+
+module.exports = {
+  plugins: [new webpack.IgnorePlugin({ resourceRegExp: /^hls\.js$/ })],
+};
+```
 
 ## Supported methods
 
