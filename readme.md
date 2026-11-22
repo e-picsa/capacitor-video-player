@@ -93,6 +93,27 @@ npx cap sync
 
 No configuration required for this plugin
 
+### Reducing bundle size (optional Cast + HLS)
+
+If you only play progressive files (`mp4`, `webm`, …) you can drop Cast and HLS:
+
+**Android — disable Cast** (removes `play-services-cast-framework`, several MB):
+
+```properties
+# android/gradle.properties
+capacitorVideoPlayerCast=false
+```
+
+That switches `media3-cast` to `compileOnly` and the plugin hides the cast button via reflection — no crash. Default is `true`, so existing cast users upgrade with zero change. Full details in [docs/optional-cast-hls.md](docs/optional-cast-hls.md).
+
+**Web — drop `hls.js`** (~1.3MB source, ~140KB deflated you never pay unless you use it):
+
+```bash
+npm uninstall hls.js
+```
+
+The plugin lazy-loads it with `await import('hls.js')` only for `.m3u8` URLs (Safari plays those natively anyway). MP4/blob URLs never trigger the download.
+
 ## Supported methods
 
 | Name                               | Android | iOS | Electron | Web |
@@ -139,7 +160,10 @@ No configuration required for this plugin
 ## Dependencies
 
 - [hls.js](https://github.com/video-dev/hls.js) - HLS video playback on Web and Electron platforms
+  (optional peer — only downloaded for `.m3u8` URLs; Safari uses native HLS)
 - [ExoPlayer (Media3)](https://developer.android.com/media3) - HLS, DASH, and SmoothStreaming on Android platform
+- Chromecast (`media3-cast` + `play-services-cast-framework`) — optional on Android.
+  See [docs/optional-cast-hls.md](docs/optional-cast-hls.md) for opt-in/opt-out.
 
 ---
 

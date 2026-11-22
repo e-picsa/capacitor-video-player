@@ -1,7 +1,39 @@
-import Hls from 'hls.js';
-
 import type { videoExtension, videoMimeType } from './video-types';
 import { videoTypes } from './video-types';
+
+// hls.js is an optional peer dependency. It must only be loaded for HLS (.m3u8)
+// URLs so non-HLS consumers never download the ~1.3MB library.
+// See https://github.com/e-picsa/capacitor-video-player - HLS is lazy-loaded.
+type HlsConstructor = {
+  isSupported(): boolean;
+  Events: { FRAG_PARSED: string; ERROR: string };
+  new (): {
+    loadSource(url: string): void;
+    attachMedia(el: HTMLVideoElement): void;
+    once(event: string, cb: () => void): void;
+    on(event: string, cb: (...args: any[]) => void): void;
+    destroy(): void;
+  };
+};
+
+async function loadHlsIfAvailable(): Promise<HlsConstructor | null> {
+  try {
+    // Script-tag / IIFE consumers may provide Hls as a global (e.g. CDN).
+    const w = window as unknown as { Hls?: HlsConstructor };
+    if (w?.Hls?.isSupported?.()) {
+      return w.Hls;
+    }
+    const mod = (await import('hls.js')) as any;
+    return (mod?.default ?? mod) as HlsConstructor;
+  } catch (e) {
+    console.warn('[VideoPlayer] hls.js not installed, falling back to native HLS (if supported)', e);
+    const w = window as unknown as { Hls?: HlsConstructor };
+    if (w?.Hls) {
+      return w.Hls;
+    }
+    return null;
+  }
+}
 
 export class VideoPlayer {
   public videoEl: HTMLVideoElement | undefined;
@@ -222,49 +254,100 @@ export class VideoPlayer {
     return;
   }
 
-  private async _setPlayer(): Promise<boolean> {
+  private _setPlayer(): Promise<boolean> {
     return new Promise((resolve) => {
-      if (this.videoEl != null) {
-        if (Hls.isSupported() && this._videoType === 'application/x-mpegURL') {
-          const hls = new Hls();
-          hls.loadSource(this._url);
-          hls.attachMedia(this.videoEl);
-          hls.once(Hls.Events.FRAG_PARSED, () => {
-            if (this.videoEl != null) {
-              this.videoEl.muted = true;
-              this.videoEl.crossOrigin = 'anonymous';
+      // Wrap in async IIFE so we can `await import('hls.js')` only for HLS
+      // without changing the Promise<boolean> signature.
+      void (async () => {
+        if (this.videoEl != null) {
+          if (this._videoType === 'application/x-mpegURL') {
+            const nativeCanPlay =
+              this.videoEl.canPlayType('application/vnd.apple.mpegurl') !== '' ||
+              this.videoEl.canPlayType('application/x-mpegURL') !== '';
+            // Safari / iOS play HLS natively - no need for hls.js at all.
+            if (nativeCanPlay && !this._url.startsWith('blob:')) {
+              // Prefer native when the URL looks like a plain HLS playlist and
+              // the browser claims support. hls.js stays undownloaded.
+              try {
+                this.videoEl.src = this._url;
+                this.videoEl.crossOrigin = 'anonymous';
+                resolve(true);
+                return;
+              } catch {
+                // fall through to hls.js attempt below
+              }
+            }
+            const Hls = await loadHlsIfAvailable();
+            if (Hls?.isSupported()) {
+              const hls = new Hls();
+              hls.loadSource(this._url);
+              hls.attachMedia(this.videoEl);
+              hls.once(Hls.Events.FRAG_PARSED, () => {
+                if (this.videoEl != null) {
+                  this.videoEl.muted = true;
+                  this.videoEl.crossOrigin = 'anonymous';
+                  resolve(true);
+                } else {
+                  resolve(false);
+                }
+              });
+              hls.on(Hls.Events.ERROR, (_event: unknown, data: any) => {
+                if (data?.fatal) {
+                  console.error('[VideoPlayer] hls.js fatal error', data);
+                  try {
+                    hls.destroy();
+                  } catch {
+                    // ignore
+                  }
+                  // Last resort: try native playback (Safari) before giving up.
+                  if (nativeCanPlay && this.videoEl != null) {
+                    this.videoEl.src = this._url;
+                    resolve(true);
+                  } else {
+                    resolve(false);
+                  }
+                }
+              });
+            } else if (nativeCanPlay) {
+              // hls.js missing or unsupported (e.g. Safari) - use native.
+              this.videoEl.src = this._url;
               resolve(true);
             } else {
+              console.error(
+                '[VideoPlayer] HLS (.m3u8) requires the optional hls.js peer dependency. ' +
+                  '`npm i hls.js` or use an MP4 URL.',
+              );
               resolve(false);
             }
+          } else if (this._videoType === 'video/mp4') {
+            // CMAF (fMP4) && MP4
+            this.videoEl.src = this._url;
+            if (this._url.substring(0, 5) != 'https' && this._url.substring(0, 4) === 'http')
+              this.videoEl.crossOrigin = 'anonymous';
+            if (this._url.substring(0, 5) === 'https' || this._url.substring(0, 4) === 'http')
+              this.videoEl.muted = true;
+            resolve(true);
+          } else {
+            // Not Supported
+            resolve(false);
+          }
+          this.videoEl.addEventListener('enterpictureinpicture', (event: any) => {
+            this.pipWindow = event.pictureInPictureWindow;
+            this.pipMode = true;
+            this._closeFullscreen();
           });
-        } else if (this._videoType === 'video/mp4') {
-          // CMAF (fMP4) && MP4
-          this.videoEl.src = this._url;
-          if (this._url.substring(0, 5) != 'https' && this._url.substring(0, 4) === 'http')
-            this.videoEl.crossOrigin = 'anonymous';
-          if (this._url.substring(0, 5) === 'https' || this._url.substring(0, 4) === 'http') this.videoEl.muted = true;
-          resolve(true);
+
+          this.videoEl.addEventListener('leavepictureinpicture', () => {
+            this.pipMode = false;
+            if (!this._isEnded) {
+              this._goFullscreen();
+              if (this.videoEl != null) this.videoEl.play();
+            }
+          });
         } else {
-          // Not Supported
           resolve(false);
         }
-        this.videoEl.addEventListener('enterpictureinpicture', (event: any) => {
-          this.pipWindow = event.pictureInPictureWindow;
-          this.pipMode = true;
-          this._closeFullscreen();
-        });
-
-        this.videoEl.addEventListener('leavepictureinpicture', () => {
-          this.pipMode = false;
-          if (!this._isEnded) {
-            this._goFullscreen();
-            if (this.videoEl != null) this.videoEl.play();
-          }
-        });
-      } else {
-        resolve(false);
-      }
+      })();
     });
   }
 

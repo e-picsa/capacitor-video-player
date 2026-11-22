@@ -63,7 +63,35 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-dash:1.9.1'
     implementation 'androidx.media3:media3-exoplayer-smoothstreaming:1.9.1'
     implementation 'androidx.media3:media3-session:1.9.1'
-    implementation 'androidx.media3:media3-cast:1.9.1'
+    // Cast is ON by default (backwards compatible) so unaware upgraders see zero change.
+    // Lean consumers opt out with ONE line in android/gradle.properties:
+    //   capacitorVideoPlayerCast=false
+    // or in root build.gradle: ext { capacitorVideoPlayerCast = false }
+    // or: ./gradlew -PcapacitorVideoPlayerCast=false
+    // Opt-out switches these to compileOnly + reflection (CastHelper), so
+    // play-services-cast-framework disappears and the route button hides safely.
+    // Planned 9.0.0 flips the default to false (opt-in).
+    def wantCast = true
+    try {
+        def prop = project.findProperty('capacitorVideoPlayerCast')
+        if (prop == null && rootProject.ext.has('capacitorVideoPlayerCast')) {
+            prop = rootProject.ext.capacitorVideoPlayerCast
+        }
+        if (prop != null) {
+            wantCast = prop.toString().toBoolean()
+        }
+    } catch (Exception ignored) {
+        // keep default
+    }
+    if (wantCast) {
+        implementation 'androidx.media3:media3-cast:1.9.1'
+    } else {
+        compileOnly 'androidx.media3:media3-cast:1.9.1'
+        compileOnly 'com.google.android.gms:play-services-cast-framework:21.5.0'
+    }
+    // Kept as implementation: the layout still contains a MediaRouteButton (hidden when
+    // chromecast:false or when cast libs are absent). Small footprint vs cast-framework.
+    implementation 'androidx.mediarouter:mediarouter:1.8.0'
     implementation 'com.squareup.picasso:picasso:2.71828'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

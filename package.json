@@ -73,6 +73,11 @@
     "@capacitor/core": ">=8.0.0",
     "hls.js": "^1.4.0"
   },
+  "peerDependenciesMeta": {
+    "hls.js": {
+      "optional": true
+    }
+  },
   "prettier": "@ionic/prettier-config",
   "swiftlint": "@ionic/swiftlint-config",
   "eslintConfig": {
