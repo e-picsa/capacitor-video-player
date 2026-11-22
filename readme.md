@@ -93,29 +93,13 @@ npx cap sync
 
 No configuration required for this plugin
 
-### Reducing bundle size (optional Cast + HLS)
+### Reducing bundle size (optional)
 
-Two separate savings — pick either or both:
-
-**Android — disable Cast** (Chromecast remote playback to TV/speaker — nothing to do with
-file formats, you can cast plain MP4s; dropping it removes `play-services-cast-framework`,
-several MB):
-
-```properties
-# android/gradle.properties
-capacitorVideoPlayerCast=false
-```
-
-That switches `media3-cast` to `compileOnly` and the plugin hides the cast button via reflection — no crash. Default is `true`, so existing cast users upgrade with zero change. Full details in [docs/optional-cast-hls.md](docs/optional-cast-hls.md).
-
-**Web — drop `hls.js`** (only needed for `.m3u8` adaptive-stream URLs — not for MP4;
-~1.3MB source, ~140KB deflated you never pay unless you use it):
-
-```bash
-npm uninstall hls.js
-```
-
-The plugin lazy-loads it with `await import('hls.js')` only for `.m3u8` URLs (Safari plays those natively anyway). MP4/blob URLs never trigger the download.
+- **Cast (Android):** Chromecast remote playback to a TV/speaker. On by default. To remove
+  `play-services-cast-framework` (several MB), set in `android/gradle.properties`:
+  `capacitorVideoPlayerCast=false`
+- **HLS (Web):** only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only
+  when required and is an optional peer, so MP4-only apps can run `npm uninstall hls.js`.
 
 ## Supported methods
 
@@ -163,10 +147,10 @@ The plugin lazy-loads it with `await import('hls.js')` only for `.m3u8` URLs (Sa
 ## Dependencies
 
 - [hls.js](https://github.com/video-dev/hls.js) - HLS video playback on Web and Electron platforms
-  (optional peer — only downloaded for `.m3u8` URLs; Safari uses native HLS)
+  (optional peer, only loaded for `.m3u8` URLs)
 - [ExoPlayer (Media3)](https://developer.android.com/media3) - HLS, DASH, and SmoothStreaming on Android platform
-- Chromecast (`media3-cast` + `play-services-cast-framework`) — optional on Android.
-  See [docs/optional-cast-hls.md](docs/optional-cast-hls.md) for opt-in/opt-out.
+- Chromecast (`media3-cast` + `play-services-cast-framework`) — on by default on Android,
+  opt out with `capacitorVideoPlayerCast=false`.
 
 ---
 

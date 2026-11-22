@@ -63,14 +63,11 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-dash:1.9.1'
     implementation 'androidx.media3:media3-exoplayer-smoothstreaming:1.9.1'
     implementation 'androidx.media3:media3-session:1.9.1'
-    // Cast is ON by default (backwards compatible) so unaware upgraders see zero change.
-    // Lean consumers opt out with ONE line in android/gradle.properties:
+    // Optional Cast (Chromecast remote playback). ON by default.
+    // Opt out in android/gradle.properties:
     //   capacitorVideoPlayerCast=false
-    // or in root build.gradle: ext { capacitorVideoPlayerCast = false }
-    // or: ./gradlew -PcapacitorVideoPlayerCast=false
-    // Opt-out switches these to compileOnly + reflection (CastHelper), so
-    // play-services-cast-framework disappears and the route button hides safely.
-    // Planned 9.0.0 flips the default to false (opt-in).
+    // (or root ext / -PcapacitorVideoPlayerCast=false).
+    // Opt-out uses compileOnly + reflection, hiding the cast button safely.
     def wantCast = true
     try {
         def prop = project.findProperty('capacitorVideoPlayerCast')
