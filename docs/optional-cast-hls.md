@@ -1,7 +1,18 @@
 # Optional Cast + HLS (8.1.0 safe default, 9.0.0 lean default)
 
-Cast (Chromecast) and HLS are now **optional but ON by default** so unaware upgraders see zero
-change. Lean consumers (picsa-apps) opt out with one line. Planned 9.0.0 flips Cast to lean-by-default.
+Two independent opt-outs bundled in one PR — don't confuse them:
+
+- **Cast = *where* video plays.** Chromecast remote playback to a TV/speaker
+  (`media3-cast` + `play-services-cast-framework` + the cast button). Works with plain MP4s —
+  it has nothing to do with streaming formats. Dropping it saves several MB of native code.
+- **HLS/DASH/SS = *how* video is delivered.** Adaptive-streaming protocols
+  (`.m3u8` / `.mpd` / `.ism`) vs progressive files (`mp4`, `webm`, …). `hls.js` (web) and
+  `media3-exoplayer-hls/dash/smoothstreaming` (Android) only matter if your URLs use those
+  extensions. Most clip apps never do.
+
+Both are now **optional but ON by default** so unaware upgraders see zero
+change. Lean consumers (picsa-apps, MP4-only, no TV casting) opt out below.
+Planned 9.0.0 flips Cast to lean-by-default.
 
 ## Android
 

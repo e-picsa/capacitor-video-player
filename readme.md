@@ -95,9 +95,11 @@ No configuration required for this plugin
 
 ### Reducing bundle size (optional Cast + HLS)
 
-If you only play progressive files (`mp4`, `webm`, …) you can drop Cast and HLS:
+Two separate savings — pick either or both:
 
-**Android — disable Cast** (removes `play-services-cast-framework`, several MB):
+**Android — disable Cast** (Chromecast remote playback to TV/speaker — nothing to do with
+file formats, you can cast plain MP4s; dropping it removes `play-services-cast-framework`,
+several MB):
 
 ```properties
 # android/gradle.properties
@@ -106,7 +108,8 @@ capacitorVideoPlayerCast=false
 
 That switches `media3-cast` to `compileOnly` and the plugin hides the cast button via reflection — no crash. Default is `true`, so existing cast users upgrade with zero change. Full details in [docs/optional-cast-hls.md](docs/optional-cast-hls.md).
 
-**Web — drop `hls.js`** (~1.3MB source, ~140KB deflated you never pay unless you use it):
+**Web — drop `hls.js`** (only needed for `.m3u8` adaptive-stream URLs — not for MP4;
+~1.3MB source, ~140KB deflated you never pay unless you use it):
 
 ```bash
 npm uninstall hls.js
