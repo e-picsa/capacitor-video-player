@@ -264,6 +264,21 @@ export class VideoPlayer {
       // without changing the Promise<boolean> signature.
       void (async () => {
         if (this.videoEl != null) {
+          // Attach PiP listeners up-front: the native-HLS branch below resolves
+          // early, and every other path must leave these registered.
+          this.videoEl.addEventListener('enterpictureinpicture', (event: any) => {
+            this.pipWindow = event.pictureInPictureWindow;
+            this.pipMode = true;
+            this._closeFullscreen();
+          });
+
+          this.videoEl.addEventListener('leavepictureinpicture', () => {
+            this.pipMode = false;
+            if (!this._isEnded) {
+              this._goFullscreen();
+              if (this.videoEl != null) this.videoEl.play();
+            }
+          });
           if (this._videoType === 'application/x-mpegURL') {
             const nativeCanPlay =
               this.videoEl.canPlayType('application/vnd.apple.mpegurl') !== '' ||
@@ -335,19 +350,6 @@ export class VideoPlayer {
             // Not Supported
             resolve(false);
           }
-          this.videoEl.addEventListener('enterpictureinpicture', (event: any) => {
-            this.pipWindow = event.pictureInPictureWindow;
-            this.pipMode = true;
-            this._closeFullscreen();
-          });
-
-          this.videoEl.addEventListener('leavepictureinpicture', () => {
-            this.pipMode = false;
-            if (!this._isEnded) {
-              this._goFullscreen();
-              if (this.videoEl != null) this.videoEl.play();
-            }
-          });
         } else {
           resolve(false);
         }

@@ -26,6 +26,9 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Merged into consumer apps so R8 keeps our Class.forName targets
+        // (CastHelper + adaptive media factories) in minified release builds.
+        consumerProguardFiles 'consumer-rules.pro'
     }
     buildTypes {
         release {
