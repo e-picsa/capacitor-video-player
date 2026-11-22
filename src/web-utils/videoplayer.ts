@@ -16,22 +16,26 @@ type HlsConstructor = {
   };
 };
 
+function getWindowHls(): HlsConstructor | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const w = window as unknown as { Hls?: HlsConstructor };
+  return w?.Hls?.isSupported?.() ? (w.Hls as HlsConstructor) : (w.Hls ?? null);
+}
+
 async function loadHlsIfAvailable(): Promise<HlsConstructor | null> {
   try {
     // Script-tag / IIFE consumers may provide Hls as a global (e.g. CDN).
-    const w = window as unknown as { Hls?: HlsConstructor };
-    if (w?.Hls?.isSupported?.()) {
-      return w.Hls;
+    const globalHls = getWindowHls();
+    if (globalHls?.isSupported?.()) {
+      return globalHls;
     }
     const mod = (await import('hls.js')) as any;
     return (mod?.default ?? mod) as HlsConstructor;
   } catch (e) {
     console.warn('[VideoPlayer] hls.js not installed, falling back to native HLS (if supported)', e);
-    const w = window as unknown as { Hls?: HlsConstructor };
-    if (w?.Hls) {
-      return w.Hls;
-    }
-    return null;
+    return getWindowHls();
   }
 }
 

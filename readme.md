@@ -100,6 +100,8 @@ No configuration required for this plugin
   `capacitorVideoPlayerCast=false`
 - **HLS (Web):** only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only
   when required and is an optional peer, so MP4-only apps can run `npm uninstall hls.js`.
+  (Webpack prints a harmless `Can't resolve 'hls.js'` warning when it's absent; playback
+  falls back safely at runtime.)
 
 ## Supported methods
 
