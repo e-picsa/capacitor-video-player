@@ -30,3 +30,4 @@
 -dontwarn androidx.media3.exoplayer.smoothstreaming.**
 -dontwarn androidx.media3.cast.**
 -dontwarn com.google.android.gms.cast.**
+-dontwarn com.google.android.gms.tasks.**
