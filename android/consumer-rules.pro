@@ -31,3 +31,8 @@
 -dontwarn androidx.media3.cast.**
 -dontwarn com.google.android.gms.cast.**
 -dontwarn com.google.android.gms.tasks.**
+
+# Our Picasso pin (2.71828) pulls OkHttp 3.10.0, whose optional Conscrypt
+# platform integration has no bundled R8 rules at that version. Silence it so
+# minified consumers don't fail on a TLS provider they never use.
+-dontwarn org.conscrypt.**
