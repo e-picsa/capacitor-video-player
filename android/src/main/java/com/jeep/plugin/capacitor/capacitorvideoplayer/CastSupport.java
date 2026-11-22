@@ -3,7 +3,7 @@ package com.jeep.plugin.capacitor.capacitorvideoplayer;
 import androidx.media3.common.Player;
 
 /**
- * Optional Cast integration.
+ * Cast integration (Chromecast remote playback).
  *
  * <p>Implemented by {@link CastHelper}, which is the <b>only</b> class in this plugin that directly
  * references {@code androidx.media3:media3-cast} and
@@ -12,14 +12,14 @@ import androidx.media3.common.Player;
  *
  * <ul>
  *   <li>{@code chromecast == true}, and
- *   <li>{@code Class.forName("androidx.media3.cast.CastPlayer")} succeeds (i.e. the consumer added
- *       the optional cast deps).
+ *   <li>{@code Class.forName("androidx.media3.cast.CastPlayer")} succeeds (i.e. the cast libraries
+ *       are present on the runtime classpath).
  * </ul>
  *
- * <p>This keeps the main fragment free of class-verification references to cast classes, so consumers
- * that exclude {@code play-services-cast-framework} (e.g. MP4-only apps) do not hit
- * {@link NoClassDefFoundError} at class-load time. When cast libs are absent the fragment simply hides
- * the cast button and plays locally.
+ * <p>This keeps the main fragment free of class-verification references to cast classes, so apps
+ * built with {@code capacitorVideoPlayerCast=false} do not hit {@link NoClassDefFoundError} at
+ * class-load time. When cast libs are absent the fragment simply hides the cast button and plays
+ * locally.
  */
 public interface CastSupport {
   /** Async init: resolves CastContext, builds CastPlayer, wires route button + session listeners. */

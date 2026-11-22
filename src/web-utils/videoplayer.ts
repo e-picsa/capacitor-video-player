@@ -21,7 +21,7 @@ function getWindowHls(): HlsConstructor | null {
     return null;
   }
   const w = window as unknown as { Hls?: HlsConstructor };
-  return w?.Hls?.isSupported?.() ? (w.Hls as HlsConstructor) : (w.Hls ?? null);
+  return w.Hls ?? null;
 }
 
 async function loadHlsIfAvailable(): Promise<HlsConstructor | null> {
@@ -258,6 +258,21 @@ export class VideoPlayer {
     return;
   }
 
+  /**
+   * Assign the video URL for native playback (Safari HLS or plain MP4 rules).
+   * Mirrors the MP4 path: mute for autoplay, anonymous CORS only for plain http
+   * (forcing crossOrigin on https breaks servers without CORS headers).
+   */
+  private applyNativeSource(): void {
+    if (this.videoEl == null) {
+      return;
+    }
+    this.videoEl.src = this._url;
+    if (this._url.substring(0, 5) != 'https' && this._url.substring(0, 4) === 'http')
+      this.videoEl.crossOrigin = 'anonymous';
+    if (this._url.substring(0, 5) === 'https' || this._url.substring(0, 4) === 'http') this.videoEl.muted = true;
+  }
+
   private _setPlayer(): Promise<boolean> {
     return new Promise((resolve) => {
       // Wrap in async IIFE so we can `await import('hls.js')` only for HLS
@@ -288,8 +303,7 @@ export class VideoPlayer {
               // Prefer native when the URL looks like a plain HLS playlist and
               // the browser claims support. hls.js stays undownloaded.
               try {
-                this.videoEl.src = this._url;
-                this.videoEl.crossOrigin = 'anonymous';
+                this.applyNativeSource();
                 resolve(true);
                 return;
               } catch {
@@ -320,7 +334,7 @@ export class VideoPlayer {
                   }
                   // Last resort: try native playback (Safari) before giving up.
                   if (nativeCanPlay && this.videoEl != null) {
-                    this.videoEl.src = this._url;
+                    this.applyNativeSource();
                     resolve(true);
                   } else {
                     resolve(false);
@@ -329,7 +343,7 @@ export class VideoPlayer {
               });
             } else if (nativeCanPlay) {
               // hls.js missing or unsupported (e.g. Safari) - use native.
-              this.videoEl.src = this._url;
+              this.applyNativeSource();
               resolve(true);
             } else {
               console.error(

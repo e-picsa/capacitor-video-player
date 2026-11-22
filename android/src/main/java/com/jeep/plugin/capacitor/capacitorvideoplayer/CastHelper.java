@@ -38,19 +38,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 /**
- * Optional Cast backend.
+ * Cast backend (Chromecast remote playback).
  *
  * <p>This is the ONLY class in the plugin that references {@code media3-cast} and {@code
  * play-services-cast-framework}. It is instantiated via reflection from {@link
  * FullscreenExoPlayerFragment} only after {@code Class.forName("androidx.media3.cast.CastPlayer")}
- * succeeds, so APKs that exclude cast libs never load (and thus never verify) this class.
- *
- * <p>Consumers that need cast must add:
- *
- * <pre>
- * implementation 'androidx.media3:media3-cast:1.9.1'
- * implementation 'com.google.android.gms:play-services-cast-framework:21.5.0'
- * </pre>
+ * succeeds, so apps that exclude the cast libs (via {@code capacitorVideoPlayerCast=false}) never
+ * load (and thus never verify) this class.
  */
 public class CastHelper implements CastSupport {
 

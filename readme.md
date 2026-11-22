@@ -98,10 +98,15 @@ No configuration required for this plugin
 - **Cast (Android):** Chromecast remote playback to a TV/speaker. On by default. To remove
   `play-services-cast-framework` (several MB), set in `android/gradle.properties`:
   `capacitorVideoPlayerCast=false`
+- **Adaptive streaming (Android):** HLS/DASH/SmoothStreaming (`.m3u8`/`.mpd`/`.ism`). On by
+  default. MP4-only apps can set in `android/gradle.properties`:
+  `capacitorVideoPlayerAdaptive=false` (those URLs then fall back to progressive)
 - **HLS (Web):** only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only
-  when required and is an optional peer, so MP4-only apps can run `npm uninstall hls.js`.
-  (Webpack prints a harmless `Can't resolve 'hls.js'` warning when it's absent; playback
-  falls back safely at runtime.)
+  when required and stays installed by default. MP4-only apps that want zero bytes in web
+  assets can externalize it instead of uninstalling (uninstalling breaks Vite/esbuild/Angular
+  builds and is undone by the required peer on next install):
+  Vite `rollupOptions.external: ['hls.js']` · Angular `externalDependencies: ["hls.js"]` ·
+  Webpack `IgnorePlugin(/^hls\.js$/)`
 
 ## Supported methods
 
@@ -149,7 +154,7 @@ No configuration required for this plugin
 ## Dependencies
 
 - [hls.js](https://github.com/video-dev/hls.js) - HLS video playback on Web and Electron platforms
-  (optional peer, only loaded for `.m3u8` URLs)
+  (lazy-loaded only for `.m3u8` URLs)
 - [ExoPlayer (Media3)](https://developer.android.com/media3) - HLS, DASH, and SmoothStreaming on Android platform
 - Chromecast (`media3-cast` + `play-services-cast-framework`) — on by default on Android,
   opt out with `capacitorVideoPlayerCast=false`.

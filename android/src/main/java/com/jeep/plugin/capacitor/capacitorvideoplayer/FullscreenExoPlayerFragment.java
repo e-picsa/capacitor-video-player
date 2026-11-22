@@ -1625,12 +1625,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
   }
 
   /**
-   * Optional Cast bootstrap.
+   * Cast bootstrap.
    *
-   * <p>Chromecast defaults to true for backwards compatibility, but the cast SDK is now an
-   * optional compileOnly dependency. When the cast classes are absent (MP4-only consumers like
-   * picsa-apps that exclude play-services-cast-framework) we simply hide the route button and play
-   * locally. NoClassDefFoundError is avoided because this fragment never directly references cast
+   * <p>Chromecast defaults to on for backwards compatibility, and the cast SDK is an
+   * {@code implementation} dependency unless the app sets {@code capacitorVideoPlayerCast=false}.
+   * When the cast classes are absent we simply hide the route button and play locally.
+   * NoClassDefFoundError is avoided because this fragment never directly references cast
    * types - all cast work lives in {@link CastHelper}, loaded via reflection only when present.
    */
   private void maybeInitializeCast() {
@@ -1648,7 +1648,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
       java.lang.reflect.Constructor<?> ctor = clazz.getConstructor(FullscreenExoPlayerFragment.class);
       castSupport = (CastSupport) ctor.newInstance(this);
       castSupport.initialize();
-    } catch (Exception e) {
+    } catch (Exception | LinkageError e) {
       Log.w(TAG, "Cast init failed, hiding cast button and playing locally", e);
       castSupport = null;
       try {
@@ -1659,13 +1659,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
     }
   }
 
-  /** True when the optional media3-cast + GMS cast libs are on the runtime classpath. */
+  /** True when the media3-cast + GMS cast libs are on the runtime classpath. */
   private boolean isCastSupported() {
     try {
       Class.forName("androidx.media3.cast.CastPlayer");
       Class.forName("com.google.android.gms.cast.framework.CastContext");
       return true;
-    } catch (ClassNotFoundException e) {
+    } catch (ClassNotFoundException | LinkageError e) {
       return false;
     }
   }
@@ -1720,7 +1720,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
           factoryClass.getMethod("createMediaSource", MediaItem.class);
       Object source = createMethod.invoke(factory, MediaItem.fromUri(mediaUri));
       return (MediaSource) source;
-    } catch (ClassNotFoundException e) {
+    } catch (ClassNotFoundException | LinkageError e) {
       Log.i(TAG, "Adaptive lib missing (" + factoryClassName + "), falling back to progressive for type " + type);
     } catch (Exception e) {
       Log.w(TAG, "Failed to create adaptive source for type " + type + ", falling back to progressive", e);

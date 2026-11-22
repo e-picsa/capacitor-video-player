@@ -62,10 +62,34 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     implementation 'androidx.media3:media3-exoplayer:1.9.1'
     implementation 'androidx.media3:media3-ui:1.9.1'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.9.1'
-    implementation 'androidx.media3:media3-exoplayer-dash:1.9.1'
-    implementation 'androidx.media3:media3-exoplayer-smoothstreaming:1.9.1'
     implementation 'androidx.media3:media3-session:1.9.1'
+    // Optional adaptive streaming (HLS/DASH/SmoothStreaming). ON by default.
+    // Opt out in android/gradle.properties:
+    //   capacitorVideoPlayerAdaptive=false
+    // (or root ext / -PcapacitorVideoPlayerAdaptive=false).
+    // Opt-out uses compileOnly; buildHttpMediaSource() falls back to progressive
+    // via reflection when the libs are absent.
+    def wantAdaptive = true
+    try {
+        def propA = project.findProperty('capacitorVideoPlayerAdaptive')
+        if (propA == null && rootProject.ext.has('capacitorVideoPlayerAdaptive')) {
+            propA = rootProject.ext.capacitorVideoPlayerAdaptive
+        }
+        if (propA != null) {
+            wantAdaptive = propA.toString().toBoolean()
+        }
+    } catch (Exception ignored) {
+        // keep default
+    }
+    if (wantAdaptive) {
+        implementation 'androidx.media3:media3-exoplayer-hls:1.9.1'
+        implementation 'androidx.media3:media3-exoplayer-dash:1.9.1'
+        implementation 'androidx.media3:media3-exoplayer-smoothstreaming:1.9.1'
+    } else {
+        compileOnly 'androidx.media3:media3-exoplayer-hls:1.9.1'
+        compileOnly 'androidx.media3:media3-exoplayer-dash:1.9.1'
+        compileOnly 'androidx.media3:media3-exoplayer-smoothstreaming:1.9.1'
+    }
     // Optional Cast (Chromecast remote playback). ON by default.
     // Opt out in android/gradle.properties:
     //   capacitorVideoPlayerCast=false
