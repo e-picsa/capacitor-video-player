@@ -213,6 +213,9 @@ export interface capVideoPlayerOptions {
    * Chromecast enable/disable (Android)
    * by Manuel García Marín (https://github.com/PhantomPainX)
    * default: true
+   * Note: this hides cast for one player at runtime but still ships the Cast SDK.
+   * To remove the SDK from the APK entirely, set capacitorVideoPlayerCast=false
+   * in android/gradle.properties.
    */
   chromecast?: boolean;
   /**

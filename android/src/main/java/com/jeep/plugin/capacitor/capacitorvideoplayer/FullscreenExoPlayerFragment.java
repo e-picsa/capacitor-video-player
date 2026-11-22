@@ -10,12 +10,9 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -42,29 +39,20 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.fragment.app.Fragment;
 import androidx.mediarouter.app.MediaRouteButton;
-import androidx.mediarouter.media.MediaControlIntent;
-import androidx.mediarouter.media.MediaRouteSelector;
-import androidx.mediarouter.media.MediaRouter;
 import com.getcapacitor.JSObject;
 import androidx.media3.common.C;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.common.MediaItem;
-import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.AudioAttributes;
-import androidx.media3.cast.CastPlayer;
-import androidx.media3.cast.SessionAvailabilityListener;
 import androidx.media3.session.MediaSession;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.MergingMediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.exoplayer.source.SingleSampleMediaSource;
-import androidx.media3.exoplayer.dash.DashMediaSource;
-import androidx.media3.exoplayer.hls.HlsMediaSource;
-import androidx.media3.exoplayer.smoothstreaming.SsMediaSource;
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection;
@@ -80,24 +68,12 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.Util;
-import com.google.android.gms.cast.framework.CastButtonFactory;
-import com.google.android.gms.cast.framework.CastContext;
-import com.google.android.gms.cast.framework.CastState;
-import com.google.android.gms.cast.framework.CastStateListener;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.jeep.plugin.capacitor.capacitorvideoplayer.Notifications.NotificationCenter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import org.json.JSONException;
 
 public class FullscreenExoPlayerFragment extends Fragment {
@@ -167,7 +143,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
   private int mCurrentPosition;
   private int mDuration;
   private static final int videoStep = 10000;
-  private boolean isCastSession = false;
 
   // Tag for the instance state bundle.
   private static final String PLAYBACK_TIME = "play_time";
@@ -187,13 +162,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
   private Integer resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FIT;
   private MediaRouteButton mediaRouteButton;
-  private CastContext castContext;
-  private CastPlayer castPlayer;
-  private MediaItem mediaItem;
-  private MediaRouter mRouter;
-  private MediaRouter.Callback mCallback = new EmptyCallback();
-  private MediaRouteSelector mSelector;
-  private CastStateListener castStateListener = null;
+  private CastSupport castSupport = null;
   private Boolean playerReady = false;
 
   // Thread safety and lifecycle management
@@ -270,9 +239,11 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
     boolean isChromecast = chromecast != null ? chromecast : true;
     if (!isChromecast) {
-      mediaRouteButton.setVisibility(View.GONE);
+      if (mediaRouteButton != null) {
+        mediaRouteButton.setVisibility(View.GONE);
+      }
     } else {
-      initializeCastService();
+      maybeInitializeCast();
     }
 
     if (title != null && !title.trim().isEmpty()) {
@@ -529,39 +500,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
   }
 
   /**
-   * Sets the cast image in playerView when it is connected to a cast device
-   */
-  private class setCastImage extends AsyncTask<Void, Void, Bitmap> {
-
-    protected Bitmap doInBackground(Void... params) {
-      final String image = artwork;
-      if (image != null && !image.trim().isEmpty()) {
-        try {
-          URL url = new URL(image);
-          HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-          connection.setDoInput(true);
-          connection.connect();
-          InputStream input = connection.getInputStream();
-          Bitmap myBitmap = BitmapFactory.decodeStream(input);
-          return myBitmap;
-        } catch (IOException | IllegalArgumentException e) {
-          e.printStackTrace();
-          return null;
-        }
-      } else {
-        return null;
-      }
-    }
-
-    @Override
-    protected void onPostExecute(Bitmap result) {
-      if (cast_image != null) {
-        cast_image.setImageBitmap(result);
-      }
-    }
-  }
-
-  /**
    * Show controller
    */
   public void showController() {
@@ -593,7 +531,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
    * Perform backPressed Action
    */
   private void backPressed() {
-    if (isCastSession) {
+    if (castSupport != null && castSupport.isCastSession()) {
       playerExit();
       return;
     }
@@ -743,12 +681,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
   @Override
   public void onStart() {
     super.onStart();
-    //if (chromecast && castContext != null) mRouter.addCallback(mSelector, mCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
+    // Router discovery callback is managed inside CastHelper when cast is present.
 
     if (Util.SDK_INT >= 24) {
       if (styledPlayerView != null) {
         // If cast is playing then it doesn't start the local player once get backs from background
-        if (castContext != null && Boolean.TRUE.equals(chromecast) && castPlayer != null && castPlayer.isCastSessionAvailable()) return;
+        if (castSupport != null && castSupport.isCastSessionAvailable()) return;
 
         initializePlayer();
         if (player != null && player.getCurrentPosition() != 0) {
@@ -795,7 +733,13 @@ public class FullscreenExoPlayerFragment extends Fragment {
         mainHandler = null;
     }
     
-    if (Boolean.TRUE.equals(chromecast) && mRouter != null) mRouter.removeCallback(mCallback);
+    if (castSupport != null) {
+      try {
+        castSupport.onDestroyCleanup();
+      } catch (Exception e) {
+        Log.w(TAG, "Cast onDestroy cleanup failed", e);
+      }
+    }
     
     super.onDestroy();
   }
@@ -827,8 +771,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
   @Override
   public void onPause() {
     super.onPause();
-    if (Boolean.TRUE.equals(chromecast) && castContext != null && castStateListener != null) {
-      castContext.removeCastStateListener(castStateListener);
+    if (castSupport != null) {
+      try {
+        castSupport.onPauseCleanup();
+      } catch (Exception e) {
+        Log.w(TAG, "Cast onPause cleanup failed", e);
+      }
     }
     boolean isAppBackground = false;
     if (context != null && Boolean.TRUE.equals(bkModeEnabled)) isAppBackground = isApplicationSentToBackground(context);
@@ -875,9 +823,6 @@ public class FullscreenExoPlayerFragment extends Fragment {
             Log.e("VideoPlayer", "Error releasing player", e);
             // Force cleanup
             player = null;
-            if (castPlayer != null) {
-                castPlayer = null;
-            }
         }
     }
   }
@@ -915,15 +860,12 @@ public class FullscreenExoPlayerFragment extends Fragment {
         resetVariables();
     }
     
-    // Move chromecast handling outside the player null check
-    // and add null check for castPlayer
-    if (Boolean.TRUE.equals(chromecast) && castPlayer != null) {
+    // Cast is owned by CastHelper (loaded only when cast libs are present).
+    if (castSupport != null) {
         try {
-            castPlayer.release();
+            castSupport.release();
         } catch (Exception e) {
             Log.e("VideoPlayer", "Error releasing cast player", e);
-        } finally {
-            castPlayer = null;
         }
     }
   }
@@ -934,7 +876,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
   @Override
   public void onResume() {
     super.onResume();
-    //if (chromecast && castContext != null) castContext.addCastStateListener(castStateListener);
+    // Cast state listener re-registration is handled inside CastHelper when present.
     // Skip resume handling when the view was never inflated (orphaned fragment
     // recreation after process death returns an empty View in onCreateView, so
     // styledPlayerView stays null while async removal is still pending).
@@ -1219,13 +1161,15 @@ public class FullscreenExoPlayerFragment extends Fragment {
     ) {
       mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
     } else if ("dash".equals(type) || "mpd".equals(type)) {
-      /* adaptive streaming Dash stream */
-      DashMediaSource.Factory mediaSourceFactory = new DashMediaSource.Factory(dataSourceFactory);
-      mediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(uri));
+      /* adaptive streaming Dash stream - reflection-safe so the dash lib can be excluded */
+      mediaSource = createAdaptiveMediaSource(
+          "androidx.media3.exoplayer.dash.DashMediaSource$Factory", dataSourceFactory, uri, type);
     } else if ("m3u8".equals(type)) {
-      mediaSource = new HlsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
+      mediaSource = createAdaptiveMediaSource(
+          "androidx.media3.exoplayer.hls.HlsMediaSource$Factory", dataSourceFactory, uri, type);
     } else if ("ism".equals(type)) {
-      mediaSource = new SsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
+      mediaSource = createAdaptiveMediaSource(
+          "androidx.media3.exoplayer.smoothstreaming.SsMediaSource$Factory", dataSourceFactory, uri, type);
     } else {
       Log.w(TAG, "buildHttpMediaSource: unsupported video type '" + type + "', falling back to progressive");
       mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));
@@ -1417,7 +1361,7 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
             /* If the user start the cast before the player is ready and playing, then the video will start
               in the device and chromecast at the same time. This is to avoid that behaviour.*/
-            if (!isCastSession) {
+            if (castSupport == null || !castSupport.isCastSession()) {
                 player.setPlayWhenReady(true);
             }
         } catch (Exception e) {
@@ -1573,13 +1517,18 @@ public class FullscreenExoPlayerFragment extends Fragment {
 
   /**
    * Apply white color to MediaRouteButton
+   * Public so CastHelper (optional cast backend) can reuse it.
    * @param button
    */
+  public void tintMediaRouteButton(MediaRouteButton button) {
+    mediaRouteButtonColorWhite(button);
+  }
+
   private void mediaRouteButtonColorWhite(MediaRouteButton button) {
     if (button == null || getContext() == null) return;
-    Context castContext = new ContextThemeWrapper(getContext(), androidx.mediarouter.R.style.Theme_MediaRouter);
+    Context themedContext = new ContextThemeWrapper(getContext(), androidx.mediarouter.R.style.Theme_MediaRouter);
 
-    TypedArray a = castContext.obtainStyledAttributes(
+    TypedArray a = themedContext.obtainStyledAttributes(
       null,
       androidx.mediarouter.R.styleable.MediaRouteButton,
       androidx.mediarouter.R.attr.mediaRouteButtonStyle,
@@ -1676,173 +1625,108 @@ public class FullscreenExoPlayerFragment extends Fragment {
   }
 
   /**
-   * Function to initialize the cast service and everything related to it
-   * @return void
+   * Cast bootstrap.
+   *
+   * <p>Chromecast defaults to on for backwards compatibility, and the cast SDK is an
+   * {@code implementation} dependency unless the app sets {@code capacitorVideoPlayerCast=false}.
+   * When the cast classes are absent we simply hide the route button and play locally.
+   * NoClassDefFoundError is avoided because this fragment never directly references cast
+   * types - all cast work lives in {@link CastHelper}, loaded via reflection only when present.
    */
-  private void initializeCastService() {
-    Executor executor = Executors.newSingleThreadExecutor();
-    Task<CastContext> task = CastContext.getSharedInstance(context, executor);
-
-    task.addOnCompleteListener(new OnCompleteListener<CastContext>() {
-      @Override
-      public void onComplete(Task<CastContext> task) {
-        if (isFragmentDestroyed || !isAdded() || context == null || mediaRouteButton == null) {
-          return;
-        }
-        if (task.isSuccessful()) {
-          castContext = task.getResult();
-          castPlayer = new CastPlayer(castContext);
-          mRouter = MediaRouter.getInstance(context);
-          mSelector =
-                  new MediaRouteSelector.Builder()
-                          .addControlCategories(Arrays.asList(MediaControlIntent.CATEGORY_LIVE_AUDIO, MediaControlIntent.CATEGORY_LIVE_VIDEO))
-                          .build();
-
-          mediaRouteButtonColorWhite(mediaRouteButton);
-          if (castContext != null && castContext.getCastState() != CastState.NO_DEVICES_AVAILABLE) mediaRouteButton.setVisibility(
-                  View.VISIBLE
-          );
-
-          castStateListener =
-                  state -> {
-                    if (mediaRouteButton == null) {
-                      return;
-                    }
-                    if (state == CastState.NO_DEVICES_AVAILABLE) {
-                      mediaRouteButton.setVisibility(View.GONE);
-                    } else {
-                      if (mediaRouteButton.getVisibility() == View.GONE) {
-                        mediaRouteButton.setVisibility(View.VISIBLE);
-                      }
-                    }
-                  };
-          CastButtonFactory.setUpMediaRouteButton(context, mediaRouteButton);
-
-          MediaMetadata movieMetadata;
-          if (artwork != null && !artwork.trim().isEmpty()) {
-            MediaMetadata.Builder metadataBuilder = new MediaMetadata.Builder()
-              .setTitle(title)
-              .setSubtitle(smallTitle)
-              .setMediaType(MediaMetadata.MEDIA_TYPE_MOVIE);
-            try {
-              metadataBuilder.setArtworkUri(Uri.parse(artwork));
-            } catch (Exception e) {
-              Log.e(TAG, "Invalid artwork uri: " + artwork, e);
-            }
-            movieMetadata = metadataBuilder.build();
-            new setCastImage().execute();
-          } else {
-            movieMetadata = new MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setSubtitle(smallTitle)
-                    .build();
-          }
-          mediaItem =
-                  new MediaItem.Builder()
-                          .setUri(videoPath)
-                          .setMimeType(MimeTypes.VIDEO_UNKNOWN)
-                          .setMediaMetadata(movieMetadata)
-                          .build();
-
-          castPlayer.setSessionAvailabilityListener(
-                  new SessionAvailabilityListener() {
-                    @Override
-                    public void onCastSessionAvailable() {
-                      isCastSession = true;
-                      final Long videoPosition = player != null ? player.getCurrentPosition() : 0L;
-                      if (pipBtn != null && Boolean.TRUE.equals(pipEnabled)) {
-                        pipBtn.setVisibility(View.GONE);
-                      }
-                      if (resizeBtn != null) {
-                        resizeBtn.setVisibility(View.GONE);
-                      }
-                      if (player != null) {
-                        player.setPlayWhenReady(false);
-                      }
-                      if (cast_image != null) {
-                        cast_image.setVisibility(View.VISIBLE);
-                      }
-                      castPlayer.setMediaItem(mediaItem, videoPosition);
-                      if (styledPlayerView != null) {
-                        styledPlayerView.setPlayer(castPlayer);
-                        styledPlayerView.setControllerShowTimeoutMs(0);
-                        styledPlayerView.setControllerHideOnTouch(false);
-                        //We perform a click because for some weird reason, the layout is black until the user clicks on it
-                        styledPlayerView.performClick();
-                      }
-                    }
-
-                    @Override
-                    public void onCastSessionUnavailable() {
-                      isCastSession = false;
-                      final Long videoPosition = castPlayer != null ? castPlayer.getCurrentPosition() : 0L;
-                      if (pipBtn != null && Boolean.TRUE.equals(pipEnabled)) {
-                        pipBtn.setVisibility(View.VISIBLE);
-                      }
-                      if (resizeBtn != null) {
-                        resizeBtn.setVisibility(View.VISIBLE);
-                      }
-                      if (cast_image != null) {
-                        cast_image.setVisibility(View.GONE);
-                      }
-                      if (styledPlayerView != null) {
-                        styledPlayerView.setPlayer(player);
-                      }
-                      if (player != null) {
-                        player.setPlayWhenReady(true);
-                        player.seekTo(videoPosition);
-                      }
-                      if (styledPlayerView != null) {
-                        styledPlayerView.setControllerShowTimeoutMs(3000);
-                        styledPlayerView.setControllerHideOnTouch(true);
-                      }
-                    }
-                  }
-          );
-
-          castPlayer.addListener(
-                  new Player.Listener() {
-                    @Override
-                    public void onPlayerStateChanged(boolean playWhenReady, int state) {
-                      Map<String, Object> info = new HashMap<String, Object>() {
-                        {
-                          put("fromPlayerId", playerId);
-                          put("currentTime", String.valueOf(player != null ? player.getCurrentPosition() / 1000 : 0));
-                        }
-                      };
-                      switch (state) {
-                        case CastPlayer.STATE_READY:
-                          if (castPlayer != null && castPlayer.isPlaying()) {
-                            NotificationCenter.defaultCenter().postNotification("playerItemPlay", info);
-                          } else {
-                            NotificationCenter.defaultCenter().postNotification("playerItemPause", info);
-                          }
-                          break;
-                        default:
-                          break;
-                      }
-                    }
-                  }
-          );
-
-          castContext.addCastStateListener(castStateListener);
-          if (mRouter != null && mSelector != null && mCallback != null) {
-            mRouter.addCallback(mSelector, mCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
-          }
-
-        } else {
-          Exception e = task.getException();
-          if (e != null) {
-            e.printStackTrace();
-          } else {
-            Log.e(TAG, "initializeCastService: CastContext task failed with no exception");
-          }
-        }
+  private void maybeInitializeCast() {
+    if (mediaRouteButton == null) {
+      return;
+    }
+    if (!isCastSupported()) {
+      Log.i(TAG, "Cast libraries not present, hiding cast button and playing locally");
+      mediaRouteButton.setVisibility(View.GONE);
+      castSupport = null;
+      return;
+    }
+    try {
+      Class<?> clazz = Class.forName("com.jeep.plugin.capacitor.capacitorvideoplayer.CastHelper");
+      java.lang.reflect.Constructor<?> ctor = clazz.getConstructor(FullscreenExoPlayerFragment.class);
+      castSupport = (CastSupport) ctor.newInstance(this);
+      castSupport.initialize();
+    } catch (Exception | LinkageError e) {
+      Log.w(TAG, "Cast init failed, hiding cast button and playing locally", e);
+      castSupport = null;
+      try {
+        mediaRouteButton.setVisibility(View.GONE);
+      } catch (Exception ignored) {
+        // ignore
       }
-    });
+    }
   }
 
-  private final class EmptyCallback extends MediaRouter.Callback {}
+  /** True when the media3-cast + GMS cast libs are on the runtime classpath. */
+  private boolean isCastSupported() {
+    try {
+      Class.forName("androidx.media3.cast.CastPlayer");
+      Class.forName("com.google.android.gms.cast.framework.CastContext");
+      return true;
+    } catch (ClassNotFoundException | LinkageError e) {
+      return false;
+    }
+  }
+
+  /** Used by CastHelper - null-safe plugin context. */
+  public Context getPluginContext() {
+    return context != null ? context : getContext();
+  }
+
+  public MediaRouteButton getMediaRouteButton() {
+    return mediaRouteButton;
+  }
+
+  public PlayerView getStyledPlayerView() {
+    return styledPlayerView;
+  }
+
+  public ImageButton getPipButton() {
+    return pipBtn;
+  }
+
+  public ImageButton getResizeButton() {
+    return resizeBtn;
+  }
+
+  public ImageView getCastImageView() {
+    return cast_image;
+  }
+
+  public ExoPlayer getLocalPlayer() {
+    return player;
+  }
+
+  /** True when cast UI callbacks may still touch views. */
+  public boolean isCastUiAlive() {
+    return !isFragmentDestroyed && isAdded() && getPluginContext() != null && mediaRouteButton != null;
+  }
+
+  /**
+   * Reflection-safe adaptive source factory.
+   *
+   * <p>DASH/HLS/SS libs can be excluded by consumers that only play MP4. Direct references would
+   * fail class verification when those libs are missing, so we instantiate via reflection and fall
+   * back to progressive.
+   */
+  private MediaSource createAdaptiveMediaSource(
+      String factoryClassName, DataSource.Factory dataSourceFactory, Uri mediaUri, String type) {
+    try {
+      Class<?> factoryClass = Class.forName(factoryClassName);
+      Object factory = factoryClass.getConstructor(DataSource.Factory.class).newInstance(dataSourceFactory);
+      java.lang.reflect.Method createMethod =
+          factoryClass.getMethod("createMediaSource", MediaItem.class);
+      Object source = createMethod.invoke(factory, MediaItem.fromUri(mediaUri));
+      return (MediaSource) source;
+    } catch (ClassNotFoundException | LinkageError e) {
+      Log.i(TAG, "Adaptive lib missing (" + factoryClassName + "), falling back to progressive for type " + type);
+    } catch (Exception e) {
+      Log.w(TAG, "Failed to create adaptive source for type " + type + ", falling back to progressive", e);
+    }
+    return new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(mediaUri));
+  }
 
   @Override
   public void onConfigurationChanged(Configuration newConfig) {

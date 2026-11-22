@@ -7,7 +7,6 @@ export default {
       name: 'capacitorCapacitorVideoPlayer',
       globals: {
         '@capacitor/core': 'capacitorExports',
-        'hls.js': 'Hls',
       },
       sourcemap: true,
       inlineDynamicImports: true,

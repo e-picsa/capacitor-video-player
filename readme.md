@@ -93,6 +93,66 @@ npx cap sync
 
 No configuration required for this plugin
 
+### Reducing bundle size (optional)
+
+Everything below defaults to on. Only opt out of what you don't play.
+
+#### Android: Chromecast
+
+Remote playback to a TV/speaker. On by default. To remove
+`play-services-cast-framework` (several MB):
+
+```properties
+# android/gradle.properties
+capacitorVideoPlayerCast=false
+```
+
+The cast button is then hidden and videos play locally.
+
+#### Android: adaptive streaming
+
+HLS/DASH/SmoothStreaming (`.m3u8`/`.mpd`/`.ism`). On by default. MP4-only apps can drop
+those native libraries:
+
+```properties
+# android/gradle.properties
+capacitorVideoPlayerAdaptive=false
+```
+
+Those URLs then fall back to progressive playback.
+
+#### Web: HLS
+
+Only needed for `.m3u8` adaptive-stream URLs, not MP4. It lazy-loads only when required
+and stays installed by default. MP4-only apps that want zero bytes in web assets can
+externalize it instead of uninstalling (uninstalling breaks Vite/Angular builds and the
+required peer reinstalls it on next install).
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: { external: ['hls.js'] },
+  },
+});
+```
+
+```jsonc
+// angular.json → projects → app → architect → build → options
+{
+  "externalDependencies": ["hls.js"]
+}
+```
+
+```js
+// webpack.config.js
+const webpack = require('webpack');
+
+module.exports = {
+  plugins: [new webpack.IgnorePlugin({ resourceRegExp: /^hls\.js$/ })],
+};
+```
+
 ## Supported methods
 
 | Name                               | Android | iOS | Electron | Web |
@@ -139,7 +199,10 @@ No configuration required for this plugin
 ## Dependencies
 
 - [hls.js](https://github.com/video-dev/hls.js) - HLS video playback on Web and Electron platforms
+  (lazy-loaded only for `.m3u8` URLs)
 - [ExoPlayer (Media3)](https://developer.android.com/media3) - HLS, DASH, and SmoothStreaming on Android platform
+- Chromecast (`media3-cast` + `play-services-cast-framework`) — on by default on Android,
+  opt out with `capacitorVideoPlayerCast=false`.
 
 ---
 
